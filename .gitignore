@@ -1,0 +1,23 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+dependency-reduced-pom.xml
+
+# IDEs
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+*.vscode
+
+# Excel output files
+Analisis_Precio_*.xlsx
+*.xls
+*.xlsx
+
+# Logs
+*.log
