@@ -10,30 +10,22 @@ import javax.swing.table.*;
 import java.awt.*;
 import java.util.List;
 
-/**
- * Searchable/filterable JTable displaying the consolidated product catalog.
- * Columns grouped:
- * [Datos Base] Código, Descripción, #Prov
- * [RESUMEN PRECIO VENTA] 6 cols (basePrice per supplier)
- * [RESUMEN OFERTA] 6 cols (offerPct per supplier)
- * [RESUMEN PRECIO CON OF] 6 cols (netPrice per supplier, winner in green)
- * [POSICION] 6 cols (ranking 1..6)
- * [Análisis Final] Ganador, DIF%, Utilidad Simulada
- */
 public class ProductTablePanel extends JPanel {
 
     private static final Color TABLE_BG = new Color(38, 42, 52);
-    private static final Color WINNER_BG = new Color(39, 174, 96, 50);
+    private static final Color WINNER_BG = new Color(39, 174, 96, 100);
+    private static final Color LOSER_BG = new Color(198, 40, 40, 100);
     private static final Supplier[] SUPPLIERS = Supplier.values();
     private static final int SUPPLIER_COUNT = SUPPLIERS.length;
 
     // Column group start indices
-    private static final int COL_PRECIO_VENTA_START = 3; // 6 basePrice columns
-    private static final int COL_OFERTA_START = 3 + SUPPLIER_COUNT; // 6 offerPct columns
-    private static final int COL_PRECIO_CON_OF_START = 3 + SUPPLIER_COUNT * 2; // 6 netPrice columns
-    private static final int COL_POSICION_START = 3 + SUPPLIER_COUNT * 3; // 6 position columns
-    private static final int COL_ANALISIS_START = 3 + SUPPLIER_COUNT * 4; // Ganador, DIF%, Utilidad
-    private static final int TOTAL_COLS = 3 + SUPPLIER_COUNT * 4 + 3;
+    private static final int COL_PRECIO_VENTA_START = 3;
+    private static final int COL_OFERTA_START = 3 + SUPPLIER_COUNT;
+    private static final int COL_PRECIO_CON_OF_START = 3 + SUPPLIER_COUNT * 2;
+    private static final int COL_POSICION_START = 3 + SUPPLIER_COUNT * 3;
+    private static final int COL_ANALISIS_START = 3 + SUPPLIER_COUNT * 4;
+    private static final int COL_LOSER = COL_ANALISIS_START + 3; // Hidden column for loser supplier
+    private static final int TOTAL_COLS = 3 + SUPPLIER_COUNT * 4 + 3 + 1; // +1 for hidden loser
 
     private static final String FILTER_ALL = "Todos";
     private static final String FILTER_PREFIX_WINNER = "Ganador: ";
@@ -95,30 +87,25 @@ public class ProductTablePanel extends JPanel {
         // Build column names
         String[] columnNames = new String[TOTAL_COLS];
         int col = 0;
-        // [Datos Base]
         columnNames[col++] = "Código";
         columnNames[col++] = "Descripción";
         columnNames[col++] = "#Prov";
-        // [RESUMEN PRECIO VENTA]
         for (Supplier s : SUPPLIERS) {
             columnNames[col++] = "PV " + s.getDisplayName();
         }
-        // [RESUMEN OFERTA]
         for (Supplier s : SUPPLIERS) {
             columnNames[col++] = "OF " + s.getDisplayName();
         }
-        // [RESUMEN PRECIO CON OF]
         for (Supplier s : SUPPLIERS) {
             columnNames[col++] = "NET " + s.getDisplayName();
         }
-        // [POSICION]
         for (Supplier s : SUPPLIERS) {
             columnNames[col++] = "P# " + s.getDisplayName();
         }
-        // [Análisis Final]
         columnNames[col++] = "Ganador";
         columnNames[col++] = "DIF%";
         columnNames[col++] = "Utilidad Sim.";
+        columnNames[col++] = "_loser"; // Hidden
 
         // Build table data
         Object[][] data = new Object[products.size()][TOTAL_COLS];
@@ -126,39 +113,31 @@ public class ProductTablePanel extends JPanel {
             MasterProduct mp = products.get(i);
             col = 0;
 
-            // [Datos Base]
             data[i][col++] = mp.getBarcode();
             data[i][col++] = mp.getDescription() != null ? mp.getDescription() : "";
             data[i][col++] = mp.getSupplierCount();
 
-            // [RESUMEN PRECIO VENTA]
             for (Supplier s : SUPPLIERS) {
                 double bp = mp.getBasePriceForSupplier(s);
                 data[i][col++] = bp > 0 ? bp : null;
             }
-
-            // [RESUMEN OFERTA]
             for (Supplier s : SUPPLIERS) {
                 double op = mp.getOfferPctForSupplier(s);
                 data[i][col++] = op > 0 ? op : null;
             }
-
-            // [RESUMEN PRECIO CON OF]
             for (Supplier s : SUPPLIERS) {
                 double np = mp.getNetPriceForSupplier(s);
                 data[i][col++] = np > 0 ? np : null;
             }
-
-            // [POSICION]
             for (Supplier s : SUPPLIERS) {
                 int pos = mp.getPositionForSupplier(s);
                 data[i][col++] = pos > 0 ? pos : null;
             }
 
-            // [Análisis Final]
             data[i][col++] = mp.getWinnerSupplier() != null ? mp.getWinnerSupplier().getDisplayName() : "";
             data[i][col++] = mp.getDiffPct() > 0 ? mp.getDiffPct() : null;
             data[i][col++] = mp.getSimulatedMargin() > 0 ? mp.getSimulatedMargin() : null;
+            data[i][col++] = mp.getLoserSupplier() != null ? mp.getLoserSupplier().getDisplayName() : "";
         }
 
         model = new DefaultTableModel(data, columnNames) {
@@ -173,11 +152,9 @@ public class ProductTablePanel extends JPanel {
                     return String.class;
                 if (c == 2)
                     return Integer.class;
-                // Posicion columns are Integer
                 if (c >= COL_POSICION_START && c < COL_ANALISIS_START)
                     return Integer.class;
-                // Winner column is String
-                if (c == COL_ANALISIS_START)
+                if (c == COL_ANALISIS_START || c == COL_LOSER)
                     return String.class;
                 return Double.class;
             }
@@ -195,6 +172,11 @@ public class ProductTablePanel extends JPanel {
         table.setAutoCreateRowSorter(false);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
+        // Hide loser column
+        table.getColumnModel().getColumn(COL_LOSER).setMinWidth(0);
+        table.getColumnModel().getColumn(COL_LOSER).setMaxWidth(0);
+        table.getColumnModel().getColumn(COL_LOSER).setPreferredWidth(0);
+
         // Custom header renderer with group coloring
         JTableHeader header = table.getTableHeader();
         header.setDefaultRenderer(new GroupedHeaderRenderer());
@@ -202,9 +184,9 @@ public class ProductTablePanel extends JPanel {
 
         // Set column widths
         TableColumnModel cm = table.getColumnModel();
-        cm.getColumn(0).setPreferredWidth(120); // Código
-        cm.getColumn(1).setPreferredWidth(260); // Descripción
-        cm.getColumn(2).setPreferredWidth(45); // #Prov
+        cm.getColumn(0).setPreferredWidth(120);
+        cm.getColumn(1).setPreferredWidth(260);
+        cm.getColumn(2).setPreferredWidth(45);
         for (int i = COL_PRECIO_VENTA_START; i < COL_PRECIO_VENTA_START + SUPPLIER_COUNT; i++)
             cm.getColumn(i).setPreferredWidth(82);
         for (int i = COL_OFERTA_START; i < COL_OFERTA_START + SUPPLIER_COUNT; i++)
@@ -213,9 +195,9 @@ public class ProductTablePanel extends JPanel {
             cm.getColumn(i).setPreferredWidth(85);
         for (int i = COL_POSICION_START; i < COL_POSICION_START + SUPPLIER_COUNT; i++)
             cm.getColumn(i).setPreferredWidth(52);
-        cm.getColumn(COL_ANALISIS_START).setPreferredWidth(85); // Ganador
-        cm.getColumn(COL_ANALISIS_START + 1).setPreferredWidth(65); // DIF%
-        cm.getColumn(COL_ANALISIS_START + 2).setPreferredWidth(80); // Utilidad
+        cm.getColumn(COL_ANALISIS_START).setPreferredWidth(85);
+        cm.getColumn(COL_ANALISIS_START + 1).setPreferredWidth(65);
+        cm.getColumn(COL_ANALISIS_START + 2).setPreferredWidth(80);
 
         // Custom cell renderers
         table.setDefaultRenderer(Double.class, new PriceCellRenderer());
@@ -280,7 +262,6 @@ public class ProductTablePanel extends JPanel {
                         return false;
                 }
                 if (strategy != null && !FILTER_ALL.equals(strategy)) {
-                    int modelRow = entry.getIdentifier();
                     if (strategy.startsWith(FILTER_PREFIX_WINNER)) {
                         String targetSupplier = strategy.substring(FILTER_PREFIX_WINNER.length());
                         String winner = entry.getStringValue(COL_ANALISIS_START);
@@ -288,12 +269,9 @@ public class ProductTablePanel extends JPanel {
                             return false;
                     } else if (strategy.startsWith(FILTER_PREFIX_LOSER)) {
                         String targetSupplier = strategy.substring(FILTER_PREFIX_LOSER.length());
-                        if (modelRow >= 0 && modelRow < products.size()) {
-                            MasterProduct mp = products.get(modelRow);
-                            Supplier worst = mp.getWorstPriceSupplier();
-                            if (worst == null || !worst.getDisplayName().equals(targetSupplier))
-                                return false;
-                        }
+                        String loser = entry.getStringValue(COL_LOSER);
+                        if (!targetSupplier.equals(loser))
+                            return false;
                     }
                 }
                 return true;
@@ -313,6 +291,7 @@ public class ProductTablePanel extends JPanel {
             setHorizontalAlignment(SwingConstants.RIGHT);
             setBackground(sel ? new Color(60, 70, 90) : TABLE_BG);
             setForeground(Color.WHITE);
+            setFont(t.getFont());
 
             if (value instanceof Double d) {
                 int modelRow = t.convertRowIndexToModel(row);
@@ -322,16 +301,23 @@ public class ProductTablePanel extends JPanel {
                     setText(String.format("%.1f%%", d));
                     setForeground(new Color(255, 200, 100));
                 }
-                // PRECIO CON OF section: highlight winner in green
+                // PRECIO CON OF section: highlight winner (green) and loser (red)
                 else if (column >= COL_PRECIO_CON_OF_START && column < COL_POSICION_START) {
                     setText(String.format("%.2f", d));
                     int supplierIdx = column - COL_PRECIO_CON_OF_START;
                     Supplier s = SUPPLIERS[supplierIdx];
+
                     Object winnerObj = model.getValueAt(modelRow, COL_ANALISIS_START);
+                    Object loserObj = model.getValueAt(modelRow, COL_LOSER);
+
                     if (winnerObj != null && s.getDisplayName().equals(winnerObj.toString())) {
-                        setBackground(sel ? new Color(39, 174, 96, 100) : WINNER_BG);
+                        setBackground(sel ? new Color(39, 174, 96, 140) : WINNER_BG);
                         setForeground(new Color(100, 255, 140));
-                        setFont(getFont().deriveFont(Font.BOLD));
+                        setFont(t.getFont().deriveFont(Font.BOLD));
+                    } else if (loserObj != null && s.getDisplayName().equals(loserObj.toString())) {
+                        setBackground(sel ? new Color(198, 40, 40, 140) : LOSER_BG);
+                        setForeground(new Color(255, 120, 120));
+                        setFont(t.getFont().deriveFont(Font.BOLD));
                     }
                 }
                 // DIF%

@@ -5,26 +5,39 @@ import com.pharmacyintel.model.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Core analytics engine: consolidates supplier data, computes competitiveness,
- * and generates summaries.
- *
- * Uses Full Outer Join: every barcode from every supplier is included.
- */
 public class ConsolidationEngine {
 
     private final Map<String, MasterProduct> masterCatalog = new LinkedHashMap<>();
     private final Map<String, MasterProduct> universalCatalog = new LinkedHashMap<>();
+    private Map<Supplier, List<SupplierProduct>> rawSupplierData;
 
     /**
-     * Full Outer Join consolidation: iterates over ALL suppliers
-     * and registers ANY barcode that exists, regardless of origin supplier.
+     * Consolidate with mode selection.
+     * 
+     * @param includeAllProducts false = DroActiva-centric, true = Full Outer Join
      */
-    public void consolidate(Map<Supplier, List<SupplierProduct>> supplierData) {
+    public void consolidate(boolean includeAllProducts) {
         masterCatalog.clear();
 
-        for (var entry : supplierData.entrySet()) {
-            for (SupplierProduct sp : entry.getValue()) {
+        if (rawSupplierData == null || rawSupplierData.isEmpty())
+            return;
+
+        if (includeAllProducts) {
+            // Full Outer Join: every barcode from every supplier
+            for (var entry : rawSupplierData.entrySet()) {
+                for (SupplierProduct sp : entry.getValue()) {
+                    String key = sp.getBarcode();
+                    if (key == null || key.isEmpty())
+                        continue;
+                    MasterProduct mp = masterCatalog.computeIfAbsent(key,
+                            k -> new MasterProduct(k, sp.getDescription()));
+                    mp.addSupplierProduct(sp);
+                }
+            }
+        } else {
+            // DroActiva-centric: build base catalog from DroActiva only
+            List<SupplierProduct> droactivaList = rawSupplierData.getOrDefault(Supplier.DROACTIVA, List.of());
+            for (SupplierProduct sp : droactivaList) {
                 String key = sp.getBarcode();
                 if (key == null || key.isEmpty())
                     continue;
@@ -32,17 +45,31 @@ public class ConsolidationEngine {
                         k -> new MasterProduct(k, sp.getDescription()));
                 mp.addSupplierProduct(sp);
             }
+
+            // Add other suppliers only if barcode already exists
+            for (var entry : rawSupplierData.entrySet()) {
+                if (entry.getKey() == Supplier.DROACTIVA)
+                    continue;
+                for (SupplierProduct sp : entry.getValue()) {
+                    String key = sp.getBarcode();
+                    if (key == null || key.isEmpty())
+                        continue;
+                    MasterProduct mp = masterCatalog.get(key);
+                    if (mp != null) {
+                        mp.addSupplierProduct(sp);
+                    }
+                }
+            }
         }
     }
 
-    /**
-     * Universal consolidation: same as consolidate but stored separately
-     * for gap analysis purposes.
-     */
-    public void consolidateUniversal(Map<Supplier, List<SupplierProduct>> supplierData) {
+    public void consolidateUniversal() {
         universalCatalog.clear();
 
-        for (var entry : supplierData.entrySet()) {
+        if (rawSupplierData == null)
+            return;
+
+        for (var entry : rawSupplierData.entrySet()) {
             for (SupplierProduct sp : entry.getValue()) {
                 String key = sp.getBarcode();
                 if (key == null || key.isEmpty())
@@ -58,18 +85,12 @@ public class ConsolidationEngine {
         }
     }
 
-    /**
-     * Compute competitiveness metrics for all products.
-     */
     public void computeCompetitiveness() {
         for (MasterProduct mp : masterCatalog.values()) {
             mp.computeCompetitiveness();
         }
     }
 
-    /**
-     * Run margin simulation for all products.
-     */
     public void simulateMargin(double marginPct) {
         for (MasterProduct mp : masterCatalog.values()) {
             mp.simulateMargin(marginPct);
@@ -77,14 +98,26 @@ public class ConsolidationEngine {
     }
 
     /**
-     * Full pipeline: consolidate + universal + competitiveness + margin sim
+     * Full pipeline: store raw data, consolidate, analyze, margin.
      */
-    public Map<String, MasterProduct> process(Map<Supplier, List<SupplierProduct>> supplierData, double marginPct) {
-        consolidate(supplierData);
-        consolidateUniversal(supplierData);
+    public Map<String, MasterProduct> process(Map<Supplier, List<SupplierProduct>> supplierData,
+            double marginPct, boolean includeAllProducts) {
+        this.rawSupplierData = supplierData;
+        consolidate(includeAllProducts);
+        consolidateUniversal();
         computeCompetitiveness();
         simulateMargin(marginPct);
         return masterCatalog;
+    }
+
+    /**
+     * Recalculate with new parameters without re-parsing files.
+     */
+    public void recalculate(double marginPct, boolean includeAllProducts) {
+        consolidate(includeAllProducts);
+        consolidateUniversal();
+        computeCompetitiveness();
+        simulateMargin(marginPct);
     }
 
     public Map<String, MasterProduct> getMasterCatalog() {
@@ -103,7 +136,6 @@ public class ConsolidationEngine {
     // Executive Summary Analytics
     // =============================================
 
-    /** Returns the supplier that wins the most price comparisons */
     public Supplier getSupplierWithMostWins() {
         Map<Supplier, Integer> wins = getWinCountBySupplier();
         return wins.entrySet().stream()
@@ -112,16 +144,13 @@ public class ConsolidationEngine {
                 .orElse(null);
     }
 
-    /**
-     * Returns the supplier that appears most as the worst-priced (most expensive)
-     */
     public Supplier getSupplierWithMostLosses() {
         Map<Supplier, Integer> losses = new EnumMap<>(Supplier.class);
         for (Supplier s : Supplier.values())
             losses.put(s, 0);
 
         for (MasterProduct mp : masterCatalog.values()) {
-            Supplier worst = mp.getWorstPriceSupplier();
+            Supplier worst = mp.getLoserSupplier();
             if (worst != null) {
                 losses.merge(worst, 1, Integer::sum);
             }
@@ -133,7 +162,6 @@ public class ConsolidationEngine {
                 .orElse(null);
     }
 
-    /** Returns the supplier with the best average discount across products */
     public Supplier getSupplierWithBestAvgDiscount() {
         Map<Supplier, List<Double>> discounts = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -151,7 +179,6 @@ public class ConsolidationEngine {
                 .orElse(null);
     }
 
-    /** Returns the supplier with the worst average discount position */
     public Supplier getSupplierWithWorstAvgDiscount() {
         Map<Supplier, List<Double>> discounts = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -169,7 +196,7 @@ public class ConsolidationEngine {
     }
 
     // =============================================
-    // Molecule Search (Fuzzy by keyword)
+    // Molecule Search
     // =============================================
 
     public List<MasterProduct> getCheapestByMolecule(String keyword) {
@@ -231,7 +258,6 @@ public class ConsolidationEngine {
     // Aggregate Analytics
     // =============================================
 
-    /** Average net price per supplier (only products with netPrice > 0) */
     public Map<Supplier, Double> getAveragePriceBySupplier() {
         Map<Supplier, List<Double>> prices = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -249,7 +275,6 @@ public class ConsolidationEngine {
         return avg;
     }
 
-    /** Win count per supplier */
     public Map<Supplier, Integer> getWinCountBySupplier() {
         Map<Supplier, Integer> wins = new EnumMap<>(Supplier.class);
         for (Supplier s : Supplier.values())
@@ -263,7 +288,6 @@ public class ConsolidationEngine {
         return wins;
     }
 
-    /** Total stock per supplier */
     public Map<Supplier, Integer> getTotalStockBySupplier() {
         Map<Supplier, Integer> stock = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -274,7 +298,6 @@ public class ConsolidationEngine {
         return stock;
     }
 
-    /** Count of products with offers per supplier */
     public Map<Supplier, Integer> getOfferCountBySupplier() {
         Map<Supplier, Integer> offers = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -287,7 +310,6 @@ public class ConsolidationEngine {
         return offers;
     }
 
-    /** Average base price vs net price per supplier */
     public Map<Supplier, double[]> getBasePriceVsOfferPrice() {
         Map<Supplier, List<double[]>> data = new EnumMap<>(Supplier.class);
         for (MasterProduct mp : masterCatalog.values()) {
@@ -308,17 +330,14 @@ public class ConsolidationEngine {
         return result;
     }
 
-    /** Total unique products */
     public int getTotalProducts() {
         return masterCatalog.size();
     }
 
-    /** Total products in universal catalog */
     public int getUniversalProductCount() {
         return universalCatalog.size();
     }
 
-    /** Products with at least 2 suppliers */
     public long getComparableProducts() {
         return masterCatalog.values().stream().filter(mp -> mp.getSupplierCount() >= 2).count();
     }

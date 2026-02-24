@@ -8,10 +8,6 @@ import com.pharmacyintel.report.ExcelExporter;
 import java.io.File;
 import java.util.*;
 
-/**
- * Orchestrates the full pipeline: BCV fetch → Parse files → Consolidate →
- * Analyze → Export.
- */
 public class SyncOrchestrator {
 
     public interface ProgressListener {
@@ -31,13 +27,6 @@ public class SyncOrchestrator {
         this.listener = listener;
     }
 
-    /**
-     * Execute full pipeline.
-     *
-     * @param supplierFiles map of Supplier → File
-     * @param outputDir     directory for Excel output
-     * @param fetchBcv      whether to fetch BCV rate online
-     */
     public void execute(Map<Supplier, File> supplierFiles, File outputDir, boolean fetchBcv) {
         try {
             // Phase 1: BCV Rate
@@ -72,12 +61,16 @@ public class SyncOrchestrator {
                     SupplierParser parser = createParser(supplier);
                     List<SupplierProduct> products = parser.parse(file);
 
-                    // Convert Bs prices to USD for suppliers that report in Bs
-                    if (isSupplierInBs(supplier) && bcvRate > 1) {
-                        for (SupplierProduct sp : products) {
+                    for (SupplierProduct sp : products) {
+                        // Paso 1: Si el proveedor reporta en Bs, convertir basePrice a USD
+                        if (isSupplierInBs(supplier) && bcvRate > 1) {
                             sp.setBasePrice(sp.getBasePrice() / bcvRate);
-                            sp.recalcNet(); // Recalculate netPrice after Bs→USD conversion
                         }
+                        // Paso 2: Recalcular netPrice para TODOS los proveedores
+                        sp.setNetPrice(sp.getBasePrice() * (1.0 - (sp.getOfferPct() / 100.0)));
+                    }
+
+                    if (isSupplierInBs(supplier) && bcvRate > 1) {
                         reportProgress(supplier.getDisplayName() + ": " + products.size()
                                 + " productos (convertidos de Bs a USD)", 10 + (fileIdx * 60 / totalFiles));
                     } else {
@@ -91,10 +84,10 @@ public class SyncOrchestrator {
                 }
             }
 
-            // Phase 3: Consolidate and analyze (Full Outer Join)
-            reportProgress("Consolidando datos (Full Outer Join)...", 75);
+            // Phase 3: Consolidate and analyze
+            reportProgress("Consolidando datos...", 75);
             double margin = GlobalConfig.getInstance().getTargetMarginPct();
-            engine.process(supplierData, margin);
+            engine.process(supplierData, margin, false);
 
             reportProgress("Análisis: " + engine.getTotalProducts() + " productos, "
                     + engine.getComparableProducts() + " comparables", 85);
@@ -116,9 +109,6 @@ public class SyncOrchestrator {
         }
     }
 
-    /**
-     * Returns true for suppliers whose files report prices in Bs (Bolívares).
-     */
     private boolean isSupplierInBs(Supplier supplier) {
         return supplier == Supplier.NENA || supplier == Supplier.F24;
     }

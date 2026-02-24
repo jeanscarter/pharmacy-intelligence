@@ -10,6 +10,7 @@ public class MasterProduct {
     // Computed fields
     private double bestPrice = Double.MAX_VALUE;
     private Supplier winnerSupplier;
+    private Supplier loserSupplier;
     private double diffPct;
     private double simulatedSalePrice;
     private double simulatedMargin;
@@ -24,7 +25,6 @@ public class MasterProduct {
         supplierPrices.put(sp.getSupplier(), sp);
 
         // Description priority: F24 or Cobeca (they include lab brand), else longest
-        // string
         if (sp.getSupplier() == Supplier.F24 || sp.getSupplier() == Supplier.COBECA) {
             if (sp.getDescription() != null && !sp.getDescription().isBlank()) {
                 description = sp.getDescription();
@@ -34,7 +34,6 @@ public class MasterProduct {
                 description = sp.getDescription();
             }
         } else if (sp.getDescription() != null && sp.getDescription().length() > description.length()) {
-            // Only override with longer if current desc didn't come from F24/Cobeca
             boolean currentFromPriority = false;
             for (var entry : supplierPrices.entrySet()) {
                 if ((entry.getKey() == Supplier.F24 || entry.getKey() == Supplier.COBECA)
@@ -50,10 +49,10 @@ public class MasterProduct {
         }
     }
 
-    /** Recalculate best price and ranking positions based on netPrice > 0 */
     public void computeCompetitiveness() {
         bestPrice = Double.MAX_VALUE;
         winnerSupplier = null;
+        loserSupplier = null;
         supplierPositions.clear();
 
         // Collect valid prices
@@ -78,9 +77,16 @@ public class MasterProduct {
             supplierPositions.put(validPrices.get(i).getKey(), i + 1);
         }
 
-        // Winner = position 1
+        // Winner = position 1 (lowest netPrice)
         bestPrice = validPrices.get(0).getValue();
         winnerSupplier = validPrices.get(0).getKey();
+
+        // Loser = last position (highest netPrice)
+        loserSupplier = validPrices.get(validPrices.size() - 1).getKey();
+        // If there's only 1 valid price, there's no loser
+        if (validPrices.size() <= 1) {
+            loserSupplier = null;
+        }
 
         // DIF% = difference between best and second best
         if (validPrices.size() >= 2) {
@@ -91,7 +97,6 @@ public class MasterProduct {
         }
     }
 
-    /** Simulate margin: sale price = bestPrice * (1 + marginPct/100) */
     public void simulateMargin(double marginPct) {
         if (bestPrice < Double.MAX_VALUE && bestPrice > 0) {
             simulatedSalePrice = bestPrice * (1.0 + marginPct / 100.0);
@@ -115,6 +120,7 @@ public class MasterProduct {
     }
 
     /** @deprecated Use getNetPriceForSupplier */
+    @Deprecated
     public double getPriceForSupplier(Supplier s) {
         return getNetPriceForSupplier(s);
     }
@@ -132,13 +138,11 @@ public class MasterProduct {
         return (int) supplierPrices.values().stream().filter(sp -> sp.getNetPrice() > 0).count();
     }
 
-    /** Get discount/offer for a specific supplier */
     public double getDiscountForSupplier(Supplier s) {
         SupplierProduct sp = supplierPrices.get(s);
         return sp != null ? sp.getOfferPct() : 0;
     }
 
-    /** Returns the supplier offering the best discount on this product */
     public Supplier getBestDiscountSupplier() {
         Supplier best = null;
         double bestDiscount = 0;
@@ -151,20 +155,8 @@ public class MasterProduct {
         return best;
     }
 
-    /** Returns the supplier with the highest (worst) price for this product */
     public Supplier getWorstPriceSupplier() {
-        Supplier worst = null;
-        double worstPrice = 0;
-        for (var entry : supplierPrices.entrySet()) {
-            SupplierProduct sp = entry.getValue();
-            if (sp.getNetPrice() <= 0)
-                continue;
-            if (sp.getNetPrice() > worstPrice) {
-                worstPrice = sp.getNetPrice();
-                worst = entry.getKey();
-            }
-        }
-        return worst;
+        return loserSupplier;
     }
 
     // --- Getters ---
@@ -186,6 +178,14 @@ public class MasterProduct {
 
     public Supplier getWinnerSupplier() {
         return winnerSupplier;
+    }
+
+    public Supplier getLoserSupplier() {
+        return loserSupplier;
+    }
+
+    public void setLoserSupplier(Supplier loserSupplier) {
+        this.loserSupplier = loserSupplier;
     }
 
     public double getDiffPct() {

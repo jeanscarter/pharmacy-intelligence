@@ -11,18 +11,17 @@ import java.awt.*;
 import java.io.File;
 import java.util.List;
 
-/**
- * Main dashboard: summary cards + expanded product table + action buttons.
- * Charts are accessed via a dedicated "Ver Gráficos" button that opens
- * ChartCarouselDialog.
- */
 public class DashboardPanel extends JPanel {
 
     private static final Color BG = new Color(30, 33, 40);
     private static final Color CARD_BG = new Color(40, 44, 52);
     private static final Color ACCENT = new Color(100, 160, 255);
 
+    private final ConsolidationEngine engine;
+    private final JCheckBox includeAllCheck;
+
     public DashboardPanel(ConsolidationEngine engine) {
+        this.engine = engine;
         setLayout(new MigLayout("insets 16, fill, wrap", "[grow]", "[]8[]8[grow]8[]"));
         setBackground(BG);
 
@@ -52,10 +51,10 @@ public class DashboardPanel extends JPanel {
         add(tablePanel, "grow");
 
         // --- Button Bar ---
-        JPanel buttonBar = new JPanel(new MigLayout("insets 8, fillx", "push[]16[]16[]push", ""));
+        JPanel buttonBar = new JPanel(new MigLayout("insets 8, fillx", "push[]16[]16[]16[]push", ""));
         buttonBar.setOpaque(false);
 
-        // Charts button (big and flashy)
+        // Charts button
         JButton chartsBtn = createStyledButton("📊  Ver Gráficos de Análisis", new Color(63, 81, 181));
         chartsBtn.setPreferredSize(new Dimension(320, 48));
         chartsBtn.setFont(new Font("Segoe UI", Font.BOLD, 15));
@@ -66,25 +65,49 @@ public class DashboardPanel extends JPanel {
         });
         buttonBar.add(chartsBtn);
 
-        JButton exportBtn = createStyledButton("📥  Exportar Excel", new Color(52, 168, 83));
-        exportBtn.addActionListener(e -> exportExcel(engine));
-        buttonBar.add(exportBtn);
+        // Checkbox: Incluir todos los productos
+        includeAllCheck = new JCheckBox("Incluir Todos los Productos");
+        includeAllCheck.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        includeAllCheck.setForeground(new Color(255, 200, 100));
+        includeAllCheck.setOpaque(false);
+        includeAllCheck.setSelected(false);
+        includeAllCheck.setToolTipText(
+                "Desmarcado = Solo productos de Droactiva. Marcado = Full Outer Join (todos los proveedores).");
+        buttonBar.add(includeAllCheck);
 
+        // Recalculate button
         JButton refreshBtn = createStyledButton("🔄  Recalcular con Nuevo Margen", ACCENT);
-        refreshBtn.addActionListener(e -> {
-            double margin = GlobalConfig.getInstance().getTargetMarginPct();
-            engine.simulateMargin(margin);
-            Toast.show("Margen recalculado al " + String.format("%.0f%%", margin), Toast.Type.SUCCESS);
-            removeAll();
-            DashboardPanel newDash = new DashboardPanel(engine);
-            setLayout(new BorderLayout());
-            add(newDash, BorderLayout.CENTER);
-            revalidate();
-            repaint();
-        });
+        refreshBtn.addActionListener(e -> recalculateAndRefresh());
         buttonBar.add(refreshBtn);
 
+        // Export button
+        JButton exportBtn = createStyledButton("📥  Exportar Excel", new Color(52, 168, 83));
+        exportBtn.addActionListener(ev -> exportExcel(engine));
+        buttonBar.add(exportBtn);
+
         add(buttonBar, "growx, h 60!");
+    }
+
+    private void recalculateAndRefresh() {
+        double margin = GlobalConfig.getInstance().getTargetMarginPct();
+        boolean includeAll = includeAllCheck.isSelected();
+
+        engine.recalculate(margin, includeAll);
+
+        String mode = includeAll ? "Full Outer Join" : "Solo Droactiva";
+        Toast.show("Recalculado (" + mode + ") — " + engine.getTotalProducts() + " productos", Toast.Type.SUCCESS);
+
+        // Rebuild this panel entirely
+        Container parent = getParent();
+        if (parent != null) {
+            parent.removeAll();
+            DashboardPanel newDash = new DashboardPanel(engine);
+            newDash.includeAllCheck.setSelected(includeAll);
+            parent.setLayout(new BorderLayout());
+            parent.add(newDash, BorderLayout.CENTER);
+            parent.revalidate();
+            parent.repaint();
+        }
     }
 
     private JPanel createSummaryCard(String label, String value, Color accentColor) {
