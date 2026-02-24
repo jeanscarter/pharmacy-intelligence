@@ -10,8 +10,9 @@ import java.io.FileInputStream;
 import java.util.*;
 
 /**
- * Generic Excel parser for 365/Dromarko and unrecognized supplier files.
- * Uses keyword-similarity header detection to map columns dynamically.
+ * Generic Excel parser for 365 supplier files.
+ * Extracts: Base = PRECIO(USD), Offer = DA(%).
+ * NetPrice is computed: basePrice * (1 - offerPct / 100).
  */
 public class GenericExcelParser implements SupplierParser {
 
@@ -30,16 +31,15 @@ public class GenericExcelParser implements SupplierParser {
 
             Sheet sheet = wb.getSheetAt(0);
 
-            // Scan first 15 rows for header
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
+            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1, colOffer = -1;
 
             for (int r = 0; r <= Math.min(15, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null)
                     continue;
 
-                int barcodeHit = -1, priceHit = -1, descHit = -1, stockHit = -1;
+                int barcodeHit = -1, priceHit = -1, descHit = -1, stockHit = -1, offerHit = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
                     String val = getCellString(row.getCell(c)).toLowerCase().trim();
@@ -52,11 +52,13 @@ public class GenericExcelParser implements SupplierParser {
                             || val.contains("código barra") || val.contains("cod barra")) {
                         barcodeHit = c;
                     }
-                    // Price detection (neto, precio, price)
-                    if ((val.contains("neto") && (val.contains("$") || val.contains("usd")))
-                            || val.contains("precio") && (val.contains("$") || val.contains("usd")
-                                    || val.contains("final") || val.contains("referencial"))) {
+                    // Base price detection: PRECIO(USD) or similar
+                    if (val.contains("precio") && (val.contains("$") || val.contains("usd"))) {
                         priceHit = c;
+                    }
+                    // Offer detection: DA(%)
+                    if (val.contains("da(%)") || val.equals("da(%)")) {
+                        offerHit = c;
                     }
                     // Description detection
                     if (val.contains("descripcion") || val.contains("producto") || val.contains("nombre")
@@ -76,13 +78,14 @@ public class GenericExcelParser implements SupplierParser {
                     colPrice = priceHit;
                     colDesc = descHit;
                     colStock = stockHit;
+                    colOffer = offerHit;
                     break;
                 }
             }
 
             if (headerRow == -1 || colBarcode == -1) {
                 throw new Exception("Could not detect headers for " + supplier.getDisplayName()
-                        + ". Expected columns with keywords: barra, neto/precio");
+                        + ". Expected columns with keywords: barra, precio(usd)");
             }
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
@@ -92,16 +95,18 @@ public class GenericExcelParser implements SupplierParser {
 
                 try {
                     String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode)));
-                    double price = DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)));
+                    double basePrice = DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)));
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
+                    double offerPct = colOffer >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colOffer)))
+                            : 0;
 
-                    if (barcode.isEmpty() || price <= 0)
+                    if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, price, stock, supplier);
-                    sp.setPriceUsd(price);
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock, supplier);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

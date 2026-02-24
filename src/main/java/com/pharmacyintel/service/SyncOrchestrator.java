@@ -33,7 +33,7 @@ public class SyncOrchestrator {
 
     /**
      * Execute full pipeline.
-     * 
+     *
      * @param supplierFiles map of Supplier → File
      * @param outputDir     directory for Excel output
      * @param fetchBcv      whether to fetch BCV rate online
@@ -45,10 +45,8 @@ public class SyncOrchestrator {
             if (fetchBcv) {
                 double rate = bcvService.fetchRate();
                 if (rate <= 0) {
-                    // BCV fetch failed — keep whatever is in GlobalConfig (manual rate or default)
                     double currentRate = GlobalConfig.getInstance().getBcvRate();
                     if (currentRate <= 1.0) {
-                        // Default value, user probably didn't set manual rate either
                         reportError("BCV", "No se pudo obtener la tasa BCV. Configure la tasa manual.");
                     } else {
                         reportProgress("Usando tasa manual: " + String.format("%.4f", currentRate), 10);
@@ -77,11 +75,8 @@ public class SyncOrchestrator {
                     // Convert Bs prices to USD for suppliers that report in Bs
                     if (isSupplierInBs(supplier) && bcvRate > 1) {
                         for (SupplierProduct sp : products) {
-                            double priceInBs = sp.getNetUsd();
-                            sp.setNetUsd(priceInBs / bcvRate);
-                            if (sp.getPriceUsd() > 0) {
-                                sp.setPriceUsd(sp.getPriceUsd() / bcvRate);
-                            }
+                            sp.setBasePrice(sp.getBasePrice() / bcvRate);
+                            sp.recalcNet(); // Recalculate netPrice after Bs→USD conversion
                         }
                         reportProgress(supplier.getDisplayName() + ": " + products.size()
                                 + " productos (convertidos de Bs a USD)", 10 + (fileIdx * 60 / totalFiles));
@@ -96,8 +91,8 @@ public class SyncOrchestrator {
                 }
             }
 
-            // Phase 3: Consolidate and analyze (DroActiva-centric)
-            reportProgress("Consolidando datos (base: DroActiva)...", 75);
+            // Phase 3: Consolidate and analyze (Full Outer Join)
+            reportProgress("Consolidando datos (Full Outer Join)...", 75);
             double margin = GlobalConfig.getInstance().getTargetMarginPct();
             engine.process(supplierData, margin);
 
@@ -123,7 +118,6 @@ public class SyncOrchestrator {
 
     /**
      * Returns true for suppliers whose files report prices in Bs (Bolívares).
-     * F24 and Nena use Bs pricing that must be converted to USD.
      */
     private boolean isSupplierInBs(Supplier supplier) {
         return supplier == Supplier.NENA || supplier == Supplier.F24;

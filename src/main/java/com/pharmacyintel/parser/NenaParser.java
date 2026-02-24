@@ -9,14 +9,19 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Parser for Nena Excel files.
- * Very flexible header detection: scans first 15 rows for any column containing
- * "barra" keyword for barcode, and "precio"/"neto" for price.
+ * Extracts: Base = PRECIO ($), Offer = from DCTO. EN FACTURA column.
+ * Offer is extracted from text like "Dcto en factura de 20,00%".
+ * NetPrice is computed: basePrice * (1 - offerPct / 100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
 public class NenaParser implements SupplierParser {
+
+    private static final Pattern DCTO_PATTERN = Pattern.compile("(\\d+[.,]?\\d*)\\s*%", Pattern.CASE_INSENSITIVE);
 
     @Override
     public List<SupplierProduct> parse(File file) throws Exception {
@@ -27,16 +32,15 @@ public class NenaParser implements SupplierParser {
 
             Sheet sheet = wb.getSheetAt(0);
 
-            // Flexible header detection: scan up to 15 rows
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
+            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1, colDcto = -1;
 
             for (int r = 0; r <= Math.min(15, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null)
                     continue;
 
-                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1;
+                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1, tempDcto = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
                     String val = getCellString(row.getCell(c)).trim();
@@ -46,48 +50,42 @@ public class NenaParser implements SupplierParser {
                             .replaceAll("[óòö]", "o")
                             .replaceAll("[úùü]", "u");
 
-                    // Barcode column detection (broadest match)
                     if (lower.contains("barra") || lower.contains("cod. barra") || lower.contains("codigo barra")
                             || lower.contains("ean") || lower.contains("upc")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    }
-                    // Price column detection
-                    else if (lower.contains("precio") || lower.contains("neto")
-                            || lower.contains("monto") || lower.contains("valor")
-                            || lower.contains("pvp") || lower.contains("costo")) {
-                        if (tempPrice == -1)
-                            tempPrice = c; // Take first price column
-                    }
-                    // Description column
-                    else if (lower.contains("descripcion") || lower.contains("producto")
+                    } else if (lower.contains("precio") && lower.contains("$")) {
+                        tempPrice = c;
+                    } else if (lower.contains("dcto") && lower.contains("factura")) {
+                        tempDcto = c;
+                    } else if (lower.contains("descripcion") || lower.contains("producto")
                             || lower.contains("nombre") || lower.contains("articulo")) {
                         tempDesc = c;
-                    }
-                    // Stock column
-                    else if (lower.contains("existencia") || lower.contains("stock")
+                    } else if (lower.contains("existencia") || lower.contains("stock")
                             || lower.contains("exist") || lower.contains("cantidad")
                             || lower.contains("disp")) {
                         tempStock = c;
+                    } else if (tempPrice == -1 && (lower.contains("precio") || lower.contains("costo"))) {
+                        // Fallback price detection
+                        tempPrice = c;
                     }
                 }
 
-                // Found a valid header with at least barcode
                 if (tempBarcode >= 0 && tempPrice >= 0) {
                     headerRow = r;
                     colBarcode = tempBarcode;
                     colPrice = tempPrice;
                     colDesc = tempDesc;
                     colStock = tempStock;
+                    colDcto = tempDcto;
                     break;
                 }
-                // Accept even if we only found barcode (price may be numeric-only)
                 if (tempBarcode >= 0) {
                     headerRow = r;
                     colBarcode = tempBarcode;
                     colDesc = tempDesc;
                     colStock = tempStock;
-                    // Try to find price by looking for first numeric column after barcode
+                    colDcto = tempDcto;
                     break;
                 }
             }
@@ -97,14 +95,13 @@ public class NenaParser implements SupplierParser {
                         + "Buscado: columna con 'barra', 'codigo', 'ean' en primeras 15 filas.");
             }
 
-            // If price column wasn't detected by header, try to infer from data
             if (colPrice == -1) {
                 colPrice = inferPriceColumn(sheet, headerRow, colBarcode, colDesc);
             }
 
             System.out.println("[NenaParser] Header at row " + headerRow
                     + ", barcode=" + colBarcode + ", price=" + colPrice
-                    + ", desc=" + colDesc + ", stock=" + colStock);
+                    + ", desc=" + colDesc + ", stock=" + colStock + ", dcto=" + colDcto);
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
@@ -113,16 +110,24 @@ public class NenaParser implements SupplierParser {
 
                 try {
                     String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode)));
-                    double price = colPrice >= 0 ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice))) : 0;
+                    double basePrice = colPrice >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)))
+                            : 0;
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
 
-                    if (barcode.isEmpty() || price <= 0)
+                    // Parse discount from DCTO. EN FACTURA column
+                    double offerPct = 0;
+                    if (colDcto >= 0) {
+                        String dctoRaw = getCellString(row.getCell(colDcto)).trim();
+                        offerPct = extractDctoPercentage(dctoRaw);
+                    }
+
+                    if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, price, stock, Supplier.NENA);
-                    sp.setPriceUsd(price); // Will be converted Bs->USD by orchestrator
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock, Supplier.NENA);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows
@@ -135,9 +140,30 @@ public class NenaParser implements SupplierParser {
     }
 
     /**
-     * Infer price column from data rows: find first column with consistent numeric
-     * values
+     * Extract percentage from text like "Dcto en factura de 20,00%" or "15%".
+     * Returns 0 if no percentage found.
      */
+    private double extractDctoPercentage(String text) {
+        if (text == null || text.isBlank())
+            return 0;
+        Matcher m = DCTO_PATTERN.matcher(text);
+        if (m.find()) {
+            String numStr = m.group(1).replace(",", ".");
+            try {
+                return Double.parseDouble(numStr);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        // Try parsing as plain number (if it's just a numeric value)
+        try {
+            double val = DataSanitizer.parseDecimal(text);
+            return val > 0 && val <= 100 ? val : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     private int inferPriceColumn(Sheet sheet, int headerRow, int skipCol1, int skipCol2) {
         for (int r = headerRow + 1; r <= Math.min(headerRow + 5, sheet.getLastRowNum()); r++) {
             Row row = sheet.getRow(r);
@@ -149,9 +175,8 @@ public class NenaParser implements SupplierParser {
                 Cell cell = row.getCell(c);
                 if (cell != null && cell.getCellType() == CellType.NUMERIC) {
                     double val = cell.getNumericCellValue();
-                    if (val > 0.01 && val < 999999) { // Reasonable price range
+                    if (val > 0.01 && val < 999999)
                         return c;
-                    }
                 }
             }
         }

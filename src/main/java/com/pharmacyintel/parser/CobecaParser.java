@@ -12,8 +12,8 @@ import java.util.List;
 
 /**
  * Parser for Cobeca Excel files.
- * Detects header row by keyword matching: Codigo_Barra,
- * Precio_Referencial_Final, Existencia.
+ * Extracts: Base = Precio_Referencial, Offer = Descuento_Proveedor.
+ * NetPrice is computed: basePrice * (1 - offerPct / 100).
  */
 public class CobecaParser implements SupplierParser {
 
@@ -26,9 +26,8 @@ public class CobecaParser implements SupplierParser {
 
             Sheet sheet = wb.getSheetAt(0);
 
-            // Scan for header row (first 10 rows)
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1;
+            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1, colDiscount = -1;
 
             for (int r = 0; r <= Math.min(10, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
@@ -40,14 +39,21 @@ public class CobecaParser implements SupplierParser {
                         colBarcode = c;
                     else if (val.contains("codigo_barra"))
                         colBarcode = c;
-                    else if (val.contains("precio_referencial_final") || val.contains("precio referencial final"))
+                    else if (val.contains("precio_referencial") && !val.contains("final"))
                         colPrice = c;
-                    else if (val.contains("precio") && val.contains("final") && colPrice == -1)
+                    else if (val.contains("precio referencial") && !val.contains("final"))
                         colPrice = c;
+                    else if (val.contains("descuento_proveedor") || val.contains("descuento proveedor"))
+                        colDiscount = c;
                     else if (val.contains("existencia") || val.contains("exist"))
                         colStock = c;
                     else if (val.contains("descripcion") || val.contains("producto") || val.contains("nombre"))
                         colDesc = c;
+                    // Fallback: if Precio_Referencial not found, use Precio_Referencial_Final
+                    if (colPrice == -1) {
+                        if (val.contains("precio_referencial_final") || val.contains("precio referencial final"))
+                            colPrice = c;
+                    }
                 }
                 if (colBarcode >= 0 && colPrice >= 0) {
                     headerRow = r;
@@ -56,12 +62,10 @@ public class CobecaParser implements SupplierParser {
             }
 
             if (headerRow == -1) {
-                // Fallback: try generic detection
                 throw new Exception(
-                        "Could not detect Cobeca header row. Expected columns: Codigo_Barra, Precio_Referencial_Final");
+                        "Could not detect Cobeca header row. Expected columns: Codigo_Barra, Precio_Referencial");
             }
 
-            // Parse data rows
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null)
@@ -69,16 +73,19 @@ public class CobecaParser implements SupplierParser {
 
                 try {
                     String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode)));
-                    double price = DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)));
+                    double basePrice = DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)));
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
+                    double offerPct = colDiscount >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colDiscount)))
+                            : 0;
 
-                    if (barcode.isEmpty() || price <= 0)
+                    if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, price, stock, Supplier.COBECA);
-                    sp.setPriceUsd(price);
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock,
+                            Supplier.COBECA);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

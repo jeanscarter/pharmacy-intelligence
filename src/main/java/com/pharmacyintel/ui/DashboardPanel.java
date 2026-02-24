@@ -3,19 +3,18 @@ package com.pharmacyintel.ui;
 import com.pharmacyintel.engine.ConsolidationEngine;
 import com.pharmacyintel.model.GlobalConfig;
 import com.pharmacyintel.model.MasterProduct;
-import com.pharmacyintel.model.Supplier;
 import com.pharmacyintel.report.ExcelExporter;
 import net.miginfocom.swing.MigLayout;
-import org.jfree.chart.ChartPanel;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Main dashboard with 6 analytics panels + product table + export button.
+ * Main dashboard: summary cards + expanded product table + action buttons.
+ * Charts are accessed via a dedicated "Ver Gráficos" button that opens
+ * ChartCarouselDialog.
  */
 public class DashboardPanel extends JPanel {
 
@@ -43,55 +42,29 @@ public class DashboardPanel extends JPanel {
 
         add(summaryRow, "growx, h 80!");
 
-        // --- Charts Grid (3x2) ---
-        JPanel chartsGrid = new JPanel(new MigLayout("insets 0, gap 8", "[grow][grow][grow]", "[grow][grow]"));
-        chartsGrid.setOpaque(false);
+        // --- Executive Summary Panel ---
+        ExecutiveSummaryPanel execSummary = new ExecutiveSummaryPanel(engine);
+        add(execSummary, "growx, h 90!");
 
-        // Chart 1: Average Price by Supplier
-        Map<Supplier, Double> avgPrices = engine.getAveragePriceBySupplier();
-        ChartPanel avgPriceChart = PharmacyChartFactory.createBarChart(
-                "Precio Promedio por Droguería", avgPrices, "USD");
-        chartsGrid.add(wrapChart(avgPriceChart), "grow");
-
-        // Chart 2: Market Position (Wins)
-        Map<Supplier, Integer> wins = engine.getWinCountBySupplier();
-        ChartPanel winsChart = PharmacyChartFactory.createHorizontalBarChart(
-                "Posición de Mercado (Victorias)", wins);
-        chartsGrid.add(wrapChart(winsChart), "grow");
-
-        // Chart 3: Inventory Summary
-        Map<Supplier, Integer> stock = engine.getTotalStockBySupplier();
-        ChartPanel stockChart = PharmacyChartFactory.createBarChart(
-                "Inventario Total por Droguería", stock, "Unidades");
-        chartsGrid.add(wrapChart(stockChart), "grow");
-
-        // Chart 4: Offers (Pie)
-        Map<Supplier, Integer> offers = engine.getOfferCountBySupplier();
-        ChartPanel offersChart = PharmacyChartFactory.createPieChart(
-                "Productos con Oferta", offers);
-        chartsGrid.add(wrapChart(offersChart), "grow");
-
-        // Chart 5: Base vs Offer Price
-        Map<Supplier, double[]> baseVsOffer = engine.getBasePriceVsOfferPrice();
-        ChartPanel baseVsOfferChart = PharmacyChartFactory.createGroupedBarChart(
-                "Precio Base vs Precio Neto", baseVsOffer);
-        chartsGrid.add(wrapChart(baseVsOfferChart), "grow");
-
-        // Chart 6: Win distribution by supplier (alternate view)
-        ChartPanel winsPieChart = PharmacyChartFactory.createPieChart(
-                "Distribución de Victorias", wins);
-        chartsGrid.add(wrapChart(winsPieChart), "grow");
-
-        add(chartsGrid, "grow, h 45%!");
-
-        // --- Product Table ---
+        // --- Product Table (expanded) ---
         List<MasterProduct> products = engine.getMasterProductList();
         ProductTablePanel tablePanel = new ProductTablePanel(products);
         add(tablePanel, "grow");
 
-        // --- Export Button ---
-        JPanel buttonBar = new JPanel(new MigLayout("insets 8, fillx", "push[]16[]push", ""));
+        // --- Button Bar ---
+        JPanel buttonBar = new JPanel(new MigLayout("insets 8, fillx", "push[]16[]16[]push", ""));
         buttonBar.setOpaque(false);
+
+        // Charts button (big and flashy)
+        JButton chartsBtn = createStyledButton("📊  Ver Gráficos de Análisis", new Color(63, 81, 181));
+        chartsBtn.setPreferredSize(new Dimension(320, 48));
+        chartsBtn.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        chartsBtn.addActionListener(e -> {
+            Frame owner = (Frame) SwingUtilities.getWindowAncestor(this);
+            ChartCarouselDialog dialog = new ChartCarouselDialog(owner, engine);
+            dialog.setVisible(true);
+        });
+        buttonBar.add(chartsBtn);
 
         JButton exportBtn = createStyledButton("📥  Exportar Excel", new Color(52, 168, 83));
         exportBtn.addActionListener(e -> exportExcel(engine));
@@ -102,7 +75,6 @@ public class DashboardPanel extends JPanel {
             double margin = GlobalConfig.getInstance().getTargetMarginPct();
             engine.simulateMargin(margin);
             Toast.show("Margen recalculado al " + String.format("%.0f%%", margin), Toast.Type.SUCCESS);
-            // Refresh table
             removeAll();
             DashboardPanel newDash = new DashboardPanel(engine);
             setLayout(new BorderLayout());
@@ -112,15 +84,7 @@ public class DashboardPanel extends JPanel {
         });
         buttonBar.add(refreshBtn);
 
-        add(buttonBar, "growx, h 56!");
-    }
-
-    private JPanel wrapChart(ChartPanel chartPanel) {
-        RoundedPanel wrapper = new RoundedPanel(14);
-        wrapper.setLayout(new BorderLayout());
-        wrapper.setBackground(CARD_BG);
-        wrapper.add(chartPanel, BorderLayout.CENTER);
-        return wrapper;
+        add(buttonBar, "growx, h 60!");
     }
 
     private JPanel createSummaryCard(String label, String value, Color accentColor) {
@@ -165,7 +129,6 @@ public class DashboardPanel extends JPanel {
                         GlobalConfig.getInstance().getBcvRate(), chooser.getSelectedFile());
                 Toast.show("Excel generado: " + output.getName(), Toast.Type.SUCCESS);
 
-                // Open the file
                 if (Desktop.isDesktopSupported()) {
                     Desktop.getDesktop().open(output);
                 }

@@ -10,9 +10,8 @@ import java.util.List;
 
 /**
  * Parser for Dromarko CSV (semicolon-delimited).
- * Header: DESCRIPCION; MARCA; CODIGO; EXISTENCIA; IVA; PRECIO(USD); PRECIO;
- * DA(%); DA2(%); DC(%); PP(%); DI(%); DP(%); DV(%); DVNETO(USD); DVNETO;
- * NETO(USD); NETO; BARRA; TASA; FECHVENC.
+ * Extracts: Base = PRECIO(USD), Offer = DA(%).
+ * NetPrice is computed: basePrice * (1 - offerPct / 100).
  */
 public class DromarkoParser implements SupplierParser {
 
@@ -30,11 +29,10 @@ public class DromarkoParser implements SupplierParser {
             String[] headers = headerLine.split(";");
             int colDesc = findCol(headers, "DESCRIPCION");
             int colBarcode = findCol(headers, "BARRA");
-            int colNetUsd = findCol(headers, "NETO(USD)");
             int colPriceUsd = findCol(headers, "PRECIO(USD)");
             int colStock = findCol(headers, "EXISTENCIA");
             int colIva = findCol(headers, "IVA");
-            int colDiscount = findCol(headers, "DA(%)");
+            int colOffer = findCol(headers, "DA(%)");
 
             String line;
             while ((line = br.readLine()) != null) {
@@ -43,19 +41,20 @@ public class DromarkoParser implements SupplierParser {
                 String[] cols = line.split(";", -1);
 
                 try {
-                    SupplierProduct sp = new SupplierProduct();
-                    sp.setSupplier(Supplier.DROMARKO);
-                    sp.setBarcode(DataSanitizer.cleanBarcode(safeGet(cols, colBarcode)));
-                    sp.setDescription(DataSanitizer.cleanDescription(safeGet(cols, colDesc)));
-                    sp.setNetUsd(DataSanitizer.parseDecimal(safeGet(cols, colNetUsd)));
-                    sp.setPriceUsd(DataSanitizer.parseDecimal(safeGet(cols, colPriceUsd)));
-                    sp.setStock(DataSanitizer.parseStock(safeGet(cols, colStock)));
-                    sp.setIva(DataSanitizer.parseIva(safeGet(cols, colIva)));
-                    sp.setDiscountPct(DataSanitizer.parseDecimal(safeGet(cols, colDiscount)));
+                    String barcode = DataSanitizer.cleanBarcode(safeGet(cols, colBarcode));
+                    double basePrice = DataSanitizer.parseDecimal(safeGet(cols, colPriceUsd));
+                    double offerPct = DataSanitizer.parseDecimal(safeGet(cols, colOffer));
+                    String desc = DataSanitizer.cleanDescription(safeGet(cols, colDesc));
+                    int stock = DataSanitizer.parseStock(safeGet(cols, colStock));
+                    double iva = DataSanitizer.parseIva(safeGet(cols, colIva));
 
-                    if (!sp.getBarcode().isEmpty() && sp.getNetUsd() > 0) {
-                        products.add(sp);
-                    }
+                    if (barcode.isEmpty() || basePrice <= 0)
+                        continue;
+
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock,
+                            Supplier.DROMARKO);
+                    sp.setIva(iva);
+                    products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows
                 }

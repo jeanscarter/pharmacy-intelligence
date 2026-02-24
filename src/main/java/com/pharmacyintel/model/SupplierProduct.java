@@ -3,22 +3,30 @@ package com.pharmacyintel.model;
 public class SupplierProduct {
     private String barcode;
     private String description;
-    private double netUsd;
-    private double priceUsd;
+    private double basePrice;
+    private double offerPct;
+    private double netPrice;
     private int stock;
     private Supplier supplier;
-    private double discountPct;
     private double iva;
 
     public SupplierProduct() {
     }
 
-    public SupplierProduct(String barcode, String description, double netUsd, int stock, Supplier supplier) {
+    public SupplierProduct(String barcode, String description, double basePrice, double offerPct, int stock,
+            Supplier supplier) {
         this.barcode = barcode;
         this.description = description;
-        this.netUsd = netUsd;
+        this.basePrice = basePrice;
+        this.offerPct = offerPct;
+        this.netPrice = basePrice * (1.0 - offerPct / 100.0);
         this.stock = stock;
         this.supplier = supplier;
+    }
+
+    /** Recalculate netPrice from basePrice and offerPct */
+    public void recalcNet() {
+        this.netPrice = basePrice * (1.0 - offerPct / 100.0);
     }
 
     // --- Getters & Setters ---
@@ -38,20 +46,58 @@ public class SupplierProduct {
         this.description = description;
     }
 
+    public double getBasePrice() {
+        return basePrice;
+    }
+
+    public void setBasePrice(double basePrice) {
+        this.basePrice = basePrice;
+    }
+
+    public double getOfferPct() {
+        return offerPct;
+    }
+
+    public void setOfferPct(double offerPct) {
+        this.offerPct = offerPct;
+    }
+
+    public double getNetPrice() {
+        return netPrice;
+    }
+
+    public void setNetPrice(double netPrice) {
+        this.netPrice = netPrice;
+    }
+
+    /** @deprecated Use getNetPrice() */
     public double getNetUsd() {
-        return netUsd;
+        return netPrice;
     }
 
-    public void setNetUsd(double netUsd) {
-        this.netUsd = netUsd;
+    /** @deprecated Use setNetPrice() */
+    public void setNetUsd(double net) {
+        this.netPrice = net;
     }
 
+    /** @deprecated Use getBasePrice() */
     public double getPriceUsd() {
-        return priceUsd;
+        return basePrice;
     }
 
-    public void setPriceUsd(double priceUsd) {
-        this.priceUsd = priceUsd;
+    /** @deprecated Use setBasePrice() */
+    public void setPriceUsd(double price) {
+        this.basePrice = price;
+    }
+
+    /** @deprecated Use getOfferPct() */
+    public double getDiscountPct() {
+        return offerPct;
+    }
+
+    /** @deprecated Use setOfferPct() */
+    public void setDiscountPct(double pct) {
+        this.offerPct = pct;
     }
 
     public int getStock() {
@@ -70,14 +116,6 @@ public class SupplierProduct {
         this.supplier = supplier;
     }
 
-    public double getDiscountPct() {
-        return discountPct;
-    }
-
-    public void setDiscountPct(double discountPct) {
-        this.discountPct = discountPct;
-    }
-
     public double getIva() {
         return iva;
     }
@@ -91,6 +129,6 @@ public class SupplierProduct {
     }
 
     public boolean hasDiscount() {
-        return discountPct > 0;
+        return offerPct > 0;
     }
 }

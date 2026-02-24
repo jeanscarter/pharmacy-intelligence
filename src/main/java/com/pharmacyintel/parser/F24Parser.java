@@ -12,7 +12,8 @@ import java.util.List;
 
 /**
  * Parser for F24 (Farma 24) Excel files.
- * Flexible header detection: scans first 20 rows for barcode and price columns.
+ * Extracts: Base = PRECIO MAYOR ($), Offer = OFERTA (%).
+ * NetPrice is computed: basePrice * (1 - offerPct / 100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
 public class F24Parser implements SupplierParser {
@@ -27,7 +28,7 @@ public class F24Parser implements SupplierParser {
             Sheet sheet = wb.getSheetAt(0);
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
+            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1, colOffer = -1;
 
             // Scan up to 20 rows for headers
             for (int r = 0; r <= Math.min(20, sheet.getLastRowNum()); r++) {
@@ -35,7 +36,7 @@ public class F24Parser implements SupplierParser {
                 if (row == null)
                     continue;
 
-                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1;
+                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1, tempOffer = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
                     String val = getCellString(row.getCell(c)).trim();
@@ -49,10 +50,10 @@ public class F24Parser implements SupplierParser {
                             || lower.contains("codigo barra") || lower.contains("ean")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    } else if (lower.contains("neto") || lower.contains("precio")
-                            || lower.contains("monto") || lower.contains("pvp") || lower.contains("costo")) {
-                        if (tempPrice == -1)
-                            tempPrice = c;
+                    } else if (lower.contains("precio mayor")) {
+                        tempPrice = c;
+                    } else if (lower.contains("oferta") && lower.contains("%")) {
+                        tempOffer = c;
                     } else if (lower.contains("descripcion") || lower.contains("producto")
                             || lower.contains("nombre") || lower.contains("articulo")) {
                         tempDesc = c;
@@ -69,6 +70,7 @@ public class F24Parser implements SupplierParser {
                     colPrice = tempPrice;
                     colDesc = tempDesc;
                     colStock = tempStock;
+                    colOffer = tempOffer;
                     break;
                 }
                 if (tempBarcode >= 0) {
@@ -76,6 +78,7 @@ public class F24Parser implements SupplierParser {
                     colBarcode = tempBarcode;
                     colDesc = tempDesc;
                     colStock = tempStock;
+                    colOffer = tempOffer;
                     break;
                 }
             }
@@ -92,7 +95,7 @@ public class F24Parser implements SupplierParser {
 
             System.out.println("[F24Parser] Header at row " + headerRow
                     + ", barcode=" + colBarcode + ", price=" + colPrice
-                    + ", desc=" + colDesc + ", stock=" + colStock);
+                    + ", desc=" + colDesc + ", stock=" + colStock + ", offer=" + colOffer);
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
@@ -101,16 +104,24 @@ public class F24Parser implements SupplierParser {
 
                 try {
                     String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode)));
-                    double price = colPrice >= 0 ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice))) : 0;
+                    double basePrice = colPrice >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)))
+                            : 0;
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
 
-                    if (barcode.isEmpty() || price <= 0)
+                    // Parse offer: strip % symbol
+                    double offerPct = 0;
+                    if (colOffer >= 0) {
+                        String offerRaw = getCellString(row.getCell(colOffer)).replace("%", "").trim();
+                        offerPct = DataSanitizer.parseDecimal(offerRaw);
+                    }
+
+                    if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, price, stock, Supplier.F24);
-                    sp.setPriceUsd(price); // Will be converted Bs->USD by orchestrator
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock, Supplier.F24);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

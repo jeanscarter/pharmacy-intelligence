@@ -113,7 +113,7 @@ public class ExcelExporter {
 
             // Supplier prices
             for (Supplier s : SUPPLIERS) {
-                double price = mp.getPriceForSupplier(s);
+                double price = mp.getNetPriceForSupplier(s);
                 int stock = mp.getStockForSupplier(s);
 
                 Cell pc = row.createCell(col++);
