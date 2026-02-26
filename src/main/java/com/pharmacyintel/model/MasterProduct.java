@@ -26,18 +26,18 @@ public class MasterProduct {
 
         // Description priority: F24 or Cobeca (they include lab brand), else longest
         if (sp.getSupplier() == Supplier.F24 || sp.getSupplier() == Supplier.COBECA) {
-            if (sp.getDescription() != null && !sp.getDescription().isBlank()) {
+            if (isValidDescription(sp.getDescription())) {
                 description = sp.getDescription();
             }
-        } else if (description == null || description.isBlank()) {
-            if (sp.getDescription() != null && !sp.getDescription().isBlank()) {
+        } else if (!isValidDescription(description)) {
+            if (isValidDescription(sp.getDescription())) {
                 description = sp.getDescription();
             }
-        } else if (sp.getDescription() != null && sp.getDescription().length() > description.length()) {
+        } else if (isValidDescription(sp.getDescription()) && sp.getDescription().length() > description.length()) {
             boolean currentFromPriority = false;
             for (var entry : supplierPrices.entrySet()) {
                 if ((entry.getKey() == Supplier.F24 || entry.getKey() == Supplier.COBECA)
-                        && entry.getValue().getDescription() != null
+                        && isValidDescription(entry.getValue().getDescription())
                         && entry.getValue().getDescription().equals(description)) {
                     currentFromPriority = true;
                     break;
@@ -47,6 +47,13 @@ public class MasterProduct {
                 description = sp.getDescription();
             }
         }
+    }
+
+    private boolean isValidDescription(String desc) {
+        if (desc == null || desc.isBlank())
+            return false;
+        String lower = desc.trim().toLowerCase();
+        return !lower.equals("false") && !lower.equals("true") && !lower.equals("null");
     }
 
     public void computeCompetitiveness() {
