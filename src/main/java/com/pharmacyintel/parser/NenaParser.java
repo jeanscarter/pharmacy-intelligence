@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
 
 /**
  * Parser for Nena Excel files.
- * Extracts: Base = PRECIO ($), Offer = from DCTO. EN FACTURA column.
- * Offer is extracted from text like "Dcto en factura de 20,00%".
+ * Extracts: Base = PRECIO (REFERENCIAL) in Bs, Offer = from DCTO. NENA column.
+ * Offer is extracted from text like "Dcto. nena del 7,00%".
  * NetPrice is computed: basePrice * (1 - offerPct / 100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
@@ -54,9 +54,10 @@ public class NenaParser implements SupplierParser {
                             || lower.contains("ean") || lower.contains("upc")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    } else if (lower.contains("precio") && lower.contains("$")) {
+                    } else if (lower.contains("precio") && lower.contains("referencial")
+                            && !lower.contains("externo") && !lower.contains("promo")) {
                         tempPrice = c;
-                    } else if (lower.contains("dcto") && lower.contains("factura")) {
+                    } else if (lower.contains("dcto") && lower.contains("nena")) {
                         tempDcto = c;
                     } else if (lower.contains("descripcion") || lower.contains("producto")
                             || lower.contains("nombre") || lower.contains("articulo")) {
