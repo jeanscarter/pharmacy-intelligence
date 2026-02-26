@@ -105,6 +105,7 @@ public class ConsolidationEngine {
         this.rawSupplierData = supplierData;
         consolidate(includeAllProducts);
         consolidateUniversal();
+        fillDescriptions();
         computeCompetitiveness();
         simulateMargin(marginPct);
         return masterCatalog;
@@ -116,8 +117,23 @@ public class ConsolidationEngine {
     public void recalculate(double marginPct, boolean includeAllProducts) {
         consolidate(includeAllProducts);
         consolidateUniversal();
+        fillDescriptions();
         computeCompetitiveness();
         simulateMargin(marginPct);
+    }
+
+    /**
+     * Fill empty/invalid descriptions in the master catalog
+     * by looking up the same barcode in the universal catalog.
+     */
+    private void fillDescriptions() {
+        for (var entry : masterCatalog.entrySet()) {
+            MasterProduct mp = entry.getValue();
+            MasterProduct universal = universalCatalog.get(entry.getKey());
+            if (universal != null) {
+                mp.fillEmptyDescription(universal.getDescription());
+            }
+        }
     }
 
     public Map<String, MasterProduct> getMasterCatalog() {

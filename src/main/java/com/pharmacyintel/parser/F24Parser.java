@@ -12,7 +12,8 @@ import java.util.List;
 
 /**
  * Parser for F24 (Farma 24) Excel files.
- * Extracts: Base = PRECIO MAYOR ($), Offer = OFERTA (%).
+ * Extracts: Base = PRECIO MAYOR (Bs), Offer = sum of PROMO(%) + OFERTA(%) +
+ * DA(%).
  * NetPrice is computed: basePrice * (1 - offerPct / 100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
@@ -28,7 +29,8 @@ public class F24Parser implements SupplierParser {
             Sheet sheet = wb.getSheetAt(0);
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1, colOffer = -1;
+            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
+            int colPromo = -1, colOferta = -1, colDa = -1;
 
             // Scan up to 20 rows for headers
             for (int r = 0; r <= Math.min(20, sheet.getLastRowNum()); r++) {
@@ -36,7 +38,8 @@ public class F24Parser implements SupplierParser {
                 if (row == null)
                     continue;
 
-                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1, tempOffer = -1;
+                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1;
+                int tempPromo = -1, tempOferta = -1, tempDa = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
                     String val = getCellString(row.getCell(c)).trim();
@@ -50,10 +53,15 @@ public class F24Parser implements SupplierParser {
                             || lower.contains("codigo barra") || lower.contains("ean")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    } else if (lower.contains("precio mayor")) {
+                    } else if (lower.contains("precio") && lower.contains("mayor") && lower.contains("bs")) {
+                        // PRECIO MAYOR (Bs) — explicitly in Bs
                         tempPrice = c;
+                    } else if (lower.contains("promo") && lower.contains("%")) {
+                        tempPromo = c;
                     } else if (lower.contains("oferta") && lower.contains("%")) {
-                        tempOffer = c;
+                        tempOferta = c;
+                    } else if (lower.contains("da") && lower.contains("%")) {
+                        tempDa = c;
                     } else if (lower.contains("descripcion") || lower.contains("producto")
                             || lower.contains("nombre") || lower.contains("articulo")) {
                         tempDesc = c;
@@ -70,7 +78,9 @@ public class F24Parser implements SupplierParser {
                     colPrice = tempPrice;
                     colDesc = tempDesc;
                     colStock = tempStock;
-                    colOffer = tempOffer;
+                    colPromo = tempPromo;
+                    colOferta = tempOferta;
+                    colDa = tempDa;
                     break;
                 }
                 if (tempBarcode >= 0) {
@@ -78,7 +88,9 @@ public class F24Parser implements SupplierParser {
                     colBarcode = tempBarcode;
                     colDesc = tempDesc;
                     colStock = tempStock;
-                    colOffer = tempOffer;
+                    colPromo = tempPromo;
+                    colOferta = tempOferta;
+                    colDa = tempDa;
                     break;
                 }
             }
@@ -95,7 +107,8 @@ public class F24Parser implements SupplierParser {
 
             System.out.println("[F24Parser] Header at row " + headerRow
                     + ", barcode=" + colBarcode + ", price=" + colPrice
-                    + ", desc=" + colDesc + ", stock=" + colStock + ", offer=" + colOffer);
+                    + ", desc=" + colDesc + ", stock=" + colStock
+                    + ", promo=" + colPromo + ", oferta=" + colOferta + ", da=" + colDa);
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
@@ -111,11 +124,19 @@ public class F24Parser implements SupplierParser {
                             : "";
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
 
-                    // Parse offer: strip % symbol
+                    // Sum discount from PROMO(%) + OFERTA(%) + DA(%)
                     double offerPct = 0;
-                    if (colOffer >= 0) {
-                        String offerRaw = getCellString(row.getCell(colOffer)).replace("%", "").trim();
-                        offerPct = DataSanitizer.parseDecimal(offerRaw);
+                    if (colPromo >= 0) {
+                        String raw = getCellString(row.getCell(colPromo)).replace("%", "").trim();
+                        offerPct += DataSanitizer.parseDecimal(raw);
+                    }
+                    if (colOferta >= 0) {
+                        String raw = getCellString(row.getCell(colOferta)).replace("%", "").trim();
+                        offerPct += DataSanitizer.parseDecimal(raw);
+                    }
+                    if (colDa >= 0) {
+                        String raw = getCellString(row.getCell(colDa)).replace("%", "").trim();
+                        offerPct += DataSanitizer.parseDecimal(raw);
                     }
 
                     if (barcode.isEmpty() || basePrice <= 0)

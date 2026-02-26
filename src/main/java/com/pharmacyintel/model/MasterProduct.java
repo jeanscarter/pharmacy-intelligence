@@ -175,6 +175,15 @@ public class MasterProduct {
         return description;
     }
 
+    /**
+     * Fill empty/invalid description from another source (e.g. universal catalog).
+     */
+    public void fillEmptyDescription(String fallbackDesc) {
+        if (!isValidDescription(description) && isValidDescription(fallbackDesc)) {
+            description = fallbackDesc;
+        }
+    }
+
     public Map<Supplier, SupplierProduct> getSupplierPrices() {
         return supplierPrices;
     }
