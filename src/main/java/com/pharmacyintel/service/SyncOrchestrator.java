@@ -124,7 +124,7 @@ public class SyncOrchestrator {
             case COBECA -> new CobecaParser();
             case NENA -> new NenaParser();
             case F24 -> new F24Parser();
-            case P365 -> new GenericExcelParser(Supplier.P365);
+            case P365 -> new P365CsvParser();
         };
     }
 
