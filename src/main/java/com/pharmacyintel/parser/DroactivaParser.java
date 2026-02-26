@@ -26,6 +26,9 @@ public class DroactivaParser implements SupplierParser {
             if (headerLine == null)
                 return products;
 
+            // Remove UTF-8 BOM if present
+            headerLine = headerLine.replace("\uFEFF", "");
+
             String[] headers = headerLine.split(";");
             int colDesc = findCol(headers, "DESCRIPCION");
             int colBarcode = findCol(headers, "BARRA");
