@@ -39,6 +39,8 @@ public class CobecaParser implements SupplierParser {
                         colBarcode = c;
                     else if (val.contains("codigo_barra"))
                         colBarcode = c;
+                    else if (val.equals("barra"))
+                        colBarcode = c;
                     else if (val.contains("precio_referencial") && !val.contains("final"))
                         colPrice = c;
                     else if (val.contains("precio referencial") && !val.contains("final"))

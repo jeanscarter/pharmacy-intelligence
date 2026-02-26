@@ -124,14 +124,41 @@ public class ConsolidationEngine {
 
     /**
      * Fill empty/invalid descriptions in the master catalog
-     * by looking up the same barcode in the universal catalog.
+     * by scanning ALL raw supplier data for the longest valid description per
+     * barcode.
      */
     private void fillDescriptions() {
+        if (rawSupplierData == null)
+            return;
+
+        // Build barcode -> best description from raw data
+        Map<String, String> bestDescriptions = new HashMap<>();
+        for (var entry : rawSupplierData.entrySet()) {
+            for (SupplierProduct sp : entry.getValue()) {
+                String barcode = sp.getBarcode();
+                String desc = sp.getDescription();
+                if (barcode == null || barcode.isEmpty())
+                    continue;
+                if (desc == null || desc.isBlank())
+                    continue;
+                String lower = desc.trim().toLowerCase();
+                if (lower.equals("false") || lower.equals("true") || lower.equals("null")
+                        || lower.equals("falso") || lower.equals("verdadero"))
+                    continue;
+
+                String existing = bestDescriptions.get(barcode);
+                if (existing == null || desc.length() > existing.length()) {
+                    bestDescriptions.put(barcode, desc);
+                }
+            }
+        }
+
+        // Fill empty descriptions in master catalog
         for (var entry : masterCatalog.entrySet()) {
             MasterProduct mp = entry.getValue();
-            MasterProduct universal = universalCatalog.get(entry.getKey());
-            if (universal != null) {
-                mp.fillEmptyDescription(universal.getDescription());
+            String fallback = bestDescriptions.get(entry.getKey());
+            if (fallback != null) {
+                mp.fillEmptyDescription(fallback);
             }
         }
     }

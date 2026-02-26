@@ -53,7 +53,8 @@ public class MasterProduct {
         if (desc == null || desc.isBlank())
             return false;
         String lower = desc.trim().toLowerCase();
-        return !lower.equals("false") && !lower.equals("true") && !lower.equals("null");
+        return !lower.equals("false") && !lower.equals("true") && !lower.equals("null")
+                && !lower.equals("falso") && !lower.equals("verdadero");
     }
 
     public void computeCompetitiveness() {
