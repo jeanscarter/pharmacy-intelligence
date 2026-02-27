@@ -24,8 +24,9 @@ public class ProductTablePanel extends JPanel {
     private static final int COL_PRECIO_CON_OF_START = 3 + SUPPLIER_COUNT * 2;
     private static final int COL_POSICION_START = 3 + SUPPLIER_COUNT * 3;
     private static final int COL_ANALISIS_START = 3 + SUPPLIER_COUNT * 4;
-    private static final int COL_LOSER = COL_ANALISIS_START + 3; // Hidden column for loser supplier
-    private static final int TOTAL_COLS = 3 + SUPPLIER_COUNT * 4 + 3 + 1; // +1 for hidden loser
+    private static final int COL_INVENTARIO_START = COL_ANALISIS_START + 3;
+    private static final int COL_LOSER = COL_INVENTARIO_START + SUPPLIER_COUNT; // Hidden column for loser supplier
+    private static final int TOTAL_COLS = 3 + SUPPLIER_COUNT * 4 + 3 + SUPPLIER_COUNT + 1; // +1 for hidden loser
 
     private static final String FILTER_ALL = "Todos";
     private static final String FILTER_PREFIX_WINNER = "Ganador: ";
@@ -105,6 +106,9 @@ public class ProductTablePanel extends JPanel {
         columnNames[col++] = "Ganador";
         columnNames[col++] = "DIF%";
         columnNames[col++] = "Utilidad Sim.";
+        for (Supplier s : SUPPLIERS) {
+            columnNames[col++] = "INV " + s.getDisplayName();
+        }
         columnNames[col++] = "_loser"; // Hidden
 
         // Build table data
@@ -137,6 +141,10 @@ public class ProductTablePanel extends JPanel {
             data[i][col++] = mp.getWinnerSupplier() != null ? mp.getWinnerSupplier().getDisplayName() : "";
             data[i][col++] = mp.getDiffPct() > 0 ? mp.getDiffPct() : null;
             data[i][col++] = mp.getSimulatedMargin() > 0 ? mp.getSimulatedMargin() : null;
+            for (Supplier s : SUPPLIERS) {
+                int inv = mp.getStockForSupplier(s);
+                data[i][col++] = inv > 0 ? inv : null;
+            }
             data[i][col++] = mp.getLoserSupplier() != null ? mp.getLoserSupplier().getDisplayName() : "";
         }
 
@@ -153,6 +161,8 @@ public class ProductTablePanel extends JPanel {
                 if (c == 2)
                     return Integer.class;
                 if (c >= COL_POSICION_START && c < COL_ANALISIS_START)
+                    return Integer.class;
+                if (c >= COL_INVENTARIO_START && c < COL_LOSER)
                     return Integer.class;
                 if (c == COL_ANALISIS_START || c == COL_LOSER)
                     return String.class;
@@ -198,6 +208,8 @@ public class ProductTablePanel extends JPanel {
         cm.getColumn(COL_ANALISIS_START).setPreferredWidth(85);
         cm.getColumn(COL_ANALISIS_START + 1).setPreferredWidth(65);
         cm.getColumn(COL_ANALISIS_START + 2).setPreferredWidth(80);
+        for (int i = COL_INVENTARIO_START; i < COL_INVENTARIO_START + SUPPLIER_COUNT; i++)
+            cm.getColumn(i).setPreferredWidth(65);
 
         // Custom cell renderers
         table.setDefaultRenderer(Double.class, new PriceCellRenderer());
@@ -364,6 +376,8 @@ public class ProductTablePanel extends JPanel {
                     } else {
                         setForeground(new Color(180, 180, 190));
                     }
+                } else if (column >= COL_INVENTARIO_START && column < COL_LOSER) {
+                    setForeground(new Color(220, 220, 230));
                 }
             } else {
                 setText("");
@@ -404,8 +418,10 @@ public class ProductTablePanel extends JPanel {
                 setBackground(GRP_NET);
             } else if (column < COL_ANALISIS_START) {
                 setBackground(GRP_POS);
-            } else {
+            } else if (column < COL_INVENTARIO_START) {
                 setBackground(GRP_ANAL);
+            } else {
+                setBackground(new Color(65, 80, 85));
             }
 
             return this;
