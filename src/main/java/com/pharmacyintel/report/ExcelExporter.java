@@ -9,15 +9,22 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Generates styled .xlsx export replicating the "Análisis de Precio" format.
+ * Strategic Excel Export — ordered by worst positioning of Droactiva first.
+ * Includes per-supplier PV, Offer%, Net price, Stock columns,
+ * market position, and conditional formatting (green/red).
  */
 public class ExcelExporter {
 
     private static final Supplier[] SUPPLIERS = Supplier.values();
+    private static final int SUPPLIER_COUNT = SUPPLIERS.length;
+
+    // The "base" supplier whose perspective drives the strategic order
+    private static final Supplier BASE_SUPPLIER = Supplier.DROACTIVA;
 
     public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir) throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
@@ -26,15 +33,21 @@ public class ExcelExporter {
         // --- Styles ---
         CellStyle headerStyle = createHeaderStyle(wb);
         CellStyle supplierHeaderStyle = createSupplierHeaderStyle(wb);
+        CellStyle stockHeaderStyle = createStockHeaderStyle(wb);
         CellStyle winnerStyle = createWinnerStyle(wb);
+        CellStyle loserStyle = createLoserStyle(wb);
         CellStyle priceStyle = createPriceStyle(wb);
         CellStyle pctStyle = createPercentStyle(wb);
         CellStyle textStyle = createTextStyle(wb);
+        CellStyle stockCellStyle = createStockCellStyle(wb);
+        CellStyle posWinStyle = createPositionWinStyle(wb);
+        CellStyle posLoseStyle = createPositionLoseStyle(wb);
+        CellStyle posNeutralStyle = createPositionNeutralStyle(wb);
 
         // --- Title row ---
         Row titleRow = sheet.createRow(0);
         Cell titleCell = titleRow.createCell(0);
-        titleCell.setCellValue("ANÁLISIS COMPARATIVO DE PRECIOS — DROGUERÍAS");
+        titleCell.setCellValue("ANÁLISIS COMPARATIVO DE PRECIOS — DROGUERÍAS (Estratégico)");
         CellStyle titleStyle = wb.createCellStyle();
         XSSFFont titleFont = wb.createFont();
         titleFont.setBold(true);
@@ -44,114 +57,169 @@ public class ExcelExporter {
         titleStyle.setFillForegroundColor(new XSSFColor(new byte[] { 30, 33, 40 }, null));
         titleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         titleCell.setCellStyle(titleStyle);
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 4 + SUPPLIERS.length * 2));
 
         // Info row
         Row infoRow = sheet.createRow(1);
         infoRow.createCell(0).setCellValue("Tasa BCV: " + String.format("%.4f", bcvRate));
         infoRow.createCell(3).setCellValue("Generado: " +
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+        infoRow.createCell(6).setCellValue("Perspectiva: " + BASE_SUPPLIER.getDisplayName());
+
+        // --- Compute column layout ---
+        // Fixed columns: Barcode, Description
+        // Per supplier: PV Base, Oferta%, Precio Neto, Stock
+        // Analytics: Posición, #Prov, Ganador, DIF%, DIF USD, PV Simulado, Margen USD
+        int colCount = 2 + (SUPPLIER_COUNT * 4) + 7;
 
         // --- Header row ---
         Row header = sheet.createRow(3);
         int col = 0;
-        String[] baseHeaders = { "Código de Barras", "Descripción", "# Proveedores" };
-        for (String h : baseHeaders) {
-            Cell c = header.createCell(col++);
-            c.setCellValue(h);
-            c.setCellStyle(headerStyle);
-        }
 
-        // Supplier price + stock columns
+        // Fixed headers
+        setCellStyled(header, col++, "Código de Barras", headerStyle);
+        setCellStyled(header, col++, "Descripción", headerStyle);
+
+        // Per-supplier groups
         for (Supplier s : SUPPLIERS) {
-            Cell priceHeader = header.createCell(col++);
-            priceHeader.setCellValue(s.getDisplayName() + " USD");
-            priceHeader.setCellStyle(supplierHeaderStyle);
-
-            Cell stockHeader = header.createCell(col++);
-            stockHeader.setCellValue(s.getDisplayName() + " Stock");
-            stockHeader.setCellStyle(supplierHeaderStyle);
+            setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
+            setCellStyled(header, col++, "OF% " + s.getDisplayName(), supplierHeaderStyle);
+            setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
+            setCellStyled(header, col++, "Stock " + s.getDisplayName(), stockHeaderStyle);
         }
 
-        // Analytics columns
-        String[] analyticsHeaders = { "Mejor Precio", "Droguería Ganadora", "DIF %", "P. Venta Simulado",
-                "Margen USD" };
-        for (String h : analyticsHeaders) {
-            Cell c = header.createCell(col++);
-            c.setCellValue(h);
-            c.setCellStyle(headerStyle);
-        }
+        // Analytics headers
+        setCellStyled(header, col++, "Posición " + BASE_SUPPLIER.getDisplayName(), headerStyle);
+        setCellStyled(header, col++, "# Prov", headerStyle);
+        setCellStyled(header, col++, "Droguería Ganadora", headerStyle);
+        setCellStyled(header, col++, "DIF %", headerStyle);
+        setCellStyled(header, col++, "DIF USD", headerStyle);
+        setCellStyled(header, col++, "P. Venta Simulado", headerStyle);
+        setCellStyled(header, col++, "Margen USD", headerStyle);
+
+        // Merge title row
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, colCount - 1));
+
+        // --- Sort products strategically ---
+        // Order: worst positioning of BASE_SUPPLIER first (highest diffPctForSupplier),
+        // then by position descending, then alphabetically
+        List<MasterProduct> products = catalog.values().stream()
+                .sorted(Comparator
+                        // Products where BASE_SUPPLIER has the worst relative difference come first
+                        .comparingDouble((MasterProduct mp) -> -mp.getDiffPctForSupplier(BASE_SUPPLIER))
+                        // Then by position (highest = worst = first)
+                        .thenComparingInt((MasterProduct mp) -> -mp.getPositionForSupplier(BASE_SUPPLIER))
+                        // Then alphabetically
+                        .thenComparing(mp -> mp.getDescription() != null ? mp.getDescription() : ""))
+                .toList();
 
         // --- Data rows ---
-        List<MasterProduct> products = catalog.values().stream()
-                .sorted((a, b) -> {
-                    // Sort by winner then description
-                    if (a.getWinnerSupplier() != null && b.getWinnerSupplier() != null) {
-                        int cmp = a.getWinnerSupplier().compareTo(b.getWinnerSupplier());
-                        if (cmp != 0)
-                            return cmp;
-                    }
-                    return (a.getDescription() != null ? a.getDescription() : "")
-                            .compareToIgnoreCase(b.getDescription() != null ? b.getDescription() : "");
-                }).toList();
-
         int rowIdx = 4;
         for (MasterProduct mp : products) {
             Row row = sheet.createRow(rowIdx++);
             col = 0;
 
+            // Barcode
             Cell barcodeCell = row.createCell(col++);
             barcodeCell.setCellValue(mp.getBarcode());
             barcodeCell.setCellStyle(textStyle);
 
+            // Description
             Cell descCell = row.createCell(col++);
             descCell.setCellValue(mp.getDescription() != null ? mp.getDescription() : "");
             descCell.setCellStyle(textStyle);
 
-            Cell countCell = row.createCell(col++);
-            countCell.setCellValue(mp.getSupplierCount());
-
-            // Supplier prices
+            // Per-supplier data
             for (Supplier s : SUPPLIERS) {
-                double price = mp.getNetPriceForSupplier(s);
+                double basePrice = mp.getBasePriceForSupplier(s);
+                double offerPct = mp.getOfferPctForSupplier(s);
+                double netPrice = mp.getNetPriceForSupplier(s);
                 int stock = mp.getStockForSupplier(s);
 
-                Cell pc = row.createCell(col++);
-                if (price > 0) {
-                    pc.setCellValue(price);
-                    // Highlight winner
-                    pc.setCellStyle(s == mp.getWinnerSupplier() ? winnerStyle : priceStyle);
+                // PV Base
+                Cell pvCell = row.createCell(col++);
+                if (basePrice > 0) {
+                    pvCell.setCellValue(basePrice);
+                    pvCell.setCellStyle(priceStyle);
                 }
 
-                Cell sc = row.createCell(col++);
-                if (stock > 0)
-                    sc.setCellValue(stock);
+                // Offer %
+                Cell ofCell = row.createCell(col++);
+                if (offerPct > 0) {
+                    ofCell.setCellValue(offerPct / 100.0);
+                    ofCell.setCellStyle(pctStyle);
+                }
+
+                // Net price — highlight winner/loser
+                Cell netCell = row.createCell(col++);
+                if (netPrice > 0) {
+                    netCell.setCellValue(netPrice);
+                    if (s == mp.getWinnerSupplier()) {
+                        netCell.setCellStyle(winnerStyle);
+                    } else if (s == mp.getLoserSupplier()) {
+                        netCell.setCellStyle(loserStyle);
+                    } else {
+                        netCell.setCellStyle(priceStyle);
+                    }
+                }
+
+                // Stock — visually highlighted
+                Cell stockCell = row.createCell(col++);
+                if (stock > 0) {
+                    stockCell.setCellValue(stock);
+                    stockCell.setCellStyle(stockCellStyle);
+                }
             }
 
-            // Analytics
-            Cell bestPriceCell = row.createCell(col++);
-            if (mp.getBestPrice() > 0) {
-                bestPriceCell.setCellValue(mp.getBestPrice());
-                bestPriceCell.setCellStyle(winnerStyle);
+            // ---- Analytics section ----
+            int basePos = mp.getPositionForSupplier(BASE_SUPPLIER);
+            int supplierCount = mp.getSupplierCount();
+
+            // Position "X de N" with conditional formatting
+            Cell posCell = row.createCell(col++);
+            if (basePos > 0) {
+                posCell.setCellValue(basePos + " de " + supplierCount);
+                if (basePos == 1) {
+                    posCell.setCellStyle(posWinStyle);
+                } else if (basePos >= supplierCount && supplierCount > 1) {
+                    posCell.setCellStyle(posLoseStyle);
+                } else {
+                    posCell.setCellStyle(posNeutralStyle);
+                }
             }
 
+            // # Providers
+            Cell countCell = row.createCell(col++);
+            countCell.setCellValue(supplierCount);
+
+            // Winner
             Cell winnerCell = row.createCell(col++);
             if (mp.getWinnerSupplier() != null) {
                 winnerCell.setCellValue(mp.getWinnerSupplier().getDisplayName());
             }
 
-            Cell diffCell = row.createCell(col++);
+            // DIF %
+            Cell diffPctCell = row.createCell(col++);
             if (mp.getDiffPct() > 0) {
-                diffCell.setCellValue(mp.getDiffPct() / 100.0);
-                diffCell.setCellStyle(pctStyle);
+                diffPctCell.setCellValue(mp.getDiffPct() / 100.0);
+                diffPctCell.setCellStyle(pctStyle);
             }
 
+            // DIF USD (absolute amount)
+            Cell diffAmtCell = row.createCell(col++);
+            double diffAmt = mp.getDiffAmount();
+            if (diffAmt > 0) {
+                diffAmtCell.setCellValue(diffAmt);
+                diffAmtCell.setCellStyle(priceStyle);
+            }
+
+            // PV Simulado
             Cell salePriceCell = row.createCell(col++);
             if (mp.getSimulatedSalePrice() > 0) {
                 salePriceCell.setCellValue(mp.getSimulatedSalePrice());
                 salePriceCell.setCellStyle(priceStyle);
             }
 
+            // Margen USD
             Cell marginCell = row.createCell(col++);
             if (mp.getSimulatedMargin() > 0) {
                 marginCell.setCellValue(mp.getSimulatedMargin());
@@ -160,7 +228,7 @@ public class ExcelExporter {
         }
 
         // Auto-size columns
-        for (int i = 0; i < col; i++) {
+        for (int i = 0; i < colCount; i++) {
             sheet.autoSizeColumn(i);
         }
         sheet.createFreezePane(2, 4);
@@ -175,6 +243,15 @@ public class ExcelExporter {
         wb.close();
         return outputFile;
     }
+
+    // ==================== Helper to write styled cell ====================
+    private void setCellStyled(Row row, int col, String value, CellStyle style) {
+        Cell c = row.createCell(col);
+        c.setCellValue(value);
+        c.setCellStyle(style);
+    }
+
+    // ==================== Styles ====================
 
     private CellStyle createHeaderStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
@@ -203,9 +280,35 @@ public class ExcelExporter {
         return style;
     }
 
+    private CellStyle createStockHeaderStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 10);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        style.setFont(font);
+        // Distinct background to visually highlight stock columns
+        style.setFillForegroundColor(new XSSFColor(new byte[] { 120, 60, 20 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
     private CellStyle createWinnerStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
         style.setFillForegroundColor(new XSSFColor(new byte[] { 39, (byte) 174, 96 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        style.setFont(font);
+        style.setDataFormat(wb.createDataFormat().getFormat("#,##0.00"));
+        return style;
+    }
+
+    private CellStyle createLoserStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        style.setFillForegroundColor(new XSSFColor(new byte[] { (byte) 198, 40, 40 }, null));
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         XSSFFont font = wb.createFont();
         font.setBold(true);
@@ -230,6 +333,54 @@ public class ExcelExporter {
     private CellStyle createTextStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
         style.setAlignment(HorizontalAlignment.LEFT);
+        return style;
+    }
+
+    private CellStyle createStockCellStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        // Light orange background for stock visibility
+        style.setFillForegroundColor(new XSSFColor(new byte[] { (byte) 255, (byte) 235, (byte) 205 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    /** Green background for position 1 (best) */
+    private CellStyle createPositionWinStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        // Light green
+        style.setFillForegroundColor(new XSSFColor(new byte[] { (byte) 198, (byte) 239, (byte) 206 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    /** Red background for last position (worst) */
+    private CellStyle createPositionLoseStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        // Light red
+        style.setFillForegroundColor(new XSSFColor(new byte[] { (byte) 255, (byte) 199, (byte) 206 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    /** Neutral style for middle positions */
+    private CellStyle createPositionNeutralStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        // Light yellow
+        style.setFillForegroundColor(new XSSFColor(new byte[] { (byte) 255, (byte) 252, (byte) 225 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         return style;
     }
 }

@@ -41,14 +41,21 @@ public class DashboardPanel extends JPanel {
 
         add(summaryRow, "growx, h 80!");
 
-        // --- Executive Summary Panel ---
-        ExecutiveSummaryPanel execSummary = new ExecutiveSummaryPanel(engine);
+        // --- Executive Summary Panel (dynamic KPIs) ---
+        ExecutiveSummaryPanel execSummary = new ExecutiveSummaryPanel();
         add(execSummary, "growx, h 90!");
 
         // --- Product Table (expanded) ---
         List<MasterProduct> products = engine.getMasterProductList();
         ProductTablePanel tablePanel = new ProductTablePanel(products);
         add(tablePanel, "grow");
+
+        // --- Connect filter listener: table -> KPI cards ---
+        tablePanel.setFilterChangeListener((visibleProducts, filterName) -> {
+            execSummary.updateMetrics(visibleProducts, filterName);
+        });
+        // Fire initial update
+        tablePanel.fireInitialFilter();
 
         // --- Button Bar ---
         JPanel buttonBar = new JPanel(new MigLayout("insets 8, fillx", "push[]16[]16[]16[]push", ""));

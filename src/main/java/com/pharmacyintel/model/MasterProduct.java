@@ -12,6 +12,7 @@ public class MasterProduct {
     private Supplier winnerSupplier;
     private Supplier loserSupplier;
     private double diffPct;
+    private double diffAmount; // NEW: absolute USD difference between 2nd best and best
     private double simulatedSalePrice;
     private double simulatedMargin;
     private final Map<Supplier, Integer> supplierPositions = new EnumMap<>(Supplier.class);
@@ -61,6 +62,7 @@ public class MasterProduct {
         bestPrice = Double.MAX_VALUE;
         winnerSupplier = null;
         loserSupplier = null;
+        diffAmount = 0;
         supplierPositions.clear();
 
         // Collect valid prices
@@ -80,29 +82,117 @@ public class MasterProduct {
         // Sort ascending by price
         validPrices.sort(Comparator.comparingDouble(Map.Entry::getValue));
 
-        // Assign positions (1-based ranking)
-        for (int i = 0; i < validPrices.size(); i++) {
-            supplierPositions.put(validPrices.get(i).getKey(), i + 1);
+        // --- Dense ranking: suppliers with the same price share the same position ---
+        int rank = 1;
+        supplierPositions.put(validPrices.get(0).getKey(), rank);
+        for (int i = 1; i < validPrices.size(); i++) {
+            double prevPrice = validPrices.get(i - 1).getValue();
+            double currPrice = validPrices.get(i).getValue();
+            // Only bump rank if price is strictly different (tolerance 0.001)
+            if (Math.abs(currPrice - prevPrice) > 0.001) {
+                rank++;
+            }
+            supplierPositions.put(validPrices.get(i).getKey(), rank);
         }
 
-        // Winner = position 1 (lowest netPrice)
-        bestPrice = validPrices.get(0).getValue();
-        winnerSupplier = validPrices.get(0).getKey();
-
-        // Loser = last position (highest netPrice)
-        loserSupplier = validPrices.get(validPrices.size() - 1).getKey();
-        // If there's only 1 valid price, there's no loser
-        if (validPrices.size() <= 1) {
-            loserSupplier = null;
+        // --- Ghost Price logic: winner must have stock ---
+        // Find the first supplier (by lowest price) that actually has stock
+        Supplier effectiveWinner = null;
+        double effectiveBestPrice = Double.MAX_VALUE;
+        for (var vp : validPrices) {
+            SupplierProduct sp = supplierPrices.get(vp.getKey());
+            if (sp != null && sp.hasStock()) {
+                effectiveWinner = vp.getKey();
+                effectiveBestPrice = vp.getValue();
+                break;
+            }
+        }
+        // Fallback: if nobody has stock, use the absolute lowest price
+        if (effectiveWinner == null) {
+            effectiveWinner = validPrices.get(0).getKey();
+            effectiveBestPrice = validPrices.get(0).getValue();
         }
 
-        // DIF% = difference between best and second best
+        bestPrice = effectiveBestPrice;
+        winnerSupplier = effectiveWinner;
+
+        // --- Loser: highest price among suppliers WITH stock ---
+        Supplier effectiveLoser = null;
+        for (int i = validPrices.size() - 1; i >= 0; i--) {
+            Supplier s = validPrices.get(i).getKey();
+            if (s == winnerSupplier)
+                continue;
+            SupplierProduct sp = supplierPrices.get(s);
+            if (sp != null && sp.hasStock()) {
+                effectiveLoser = s;
+                break;
+            }
+        }
+        // Fallback: if nobody else has stock, use highest price regardless
+        if (effectiveLoser == null && validPrices.size() > 1) {
+            effectiveLoser = validPrices.get(validPrices.size() - 1).getKey();
+            if (effectiveLoser == winnerSupplier)
+                effectiveLoser = null;
+        }
+        loserSupplier = effectiveLoser;
+
+        // DIF% = difference between best and second best (with stock)
         if (validPrices.size() >= 2) {
-            double secondBest = validPrices.get(1).getValue();
-            diffPct = ((secondBest - bestPrice) / bestPrice) * 100.0;
+            // Find second best price (with stock, different from winner)
+            double secondBest = -1;
+            for (var vp : validPrices) {
+                if (vp.getKey() != winnerSupplier) {
+                    SupplierProduct sp = supplierPrices.get(vp.getKey());
+                    if (sp != null && sp.hasStock()) {
+                        secondBest = vp.getValue();
+                        break;
+                    }
+                }
+            }
+            // Fallback: use absolute second if no stocked second exists
+            if (secondBest < 0) {
+                for (var vp : validPrices) {
+                    if (vp.getKey() != winnerSupplier) {
+                        secondBest = vp.getValue();
+                        break;
+                    }
+                }
+            }
+            if (secondBest > 0 && bestPrice > 0) {
+                diffPct = ((secondBest - bestPrice) / bestPrice) * 100.0;
+                diffAmount = secondBest - bestPrice;
+            } else {
+                diffPct = 0;
+                diffAmount = 0;
+            }
         } else {
             diffPct = 0;
+            diffAmount = 0;
         }
+    }
+
+    /**
+     * Returns the USD difference between the given supplier's net price and the
+     * best price.
+     * Positive = supplier is more expensive. Zero or negative = supplier IS the
+     * best.
+     */
+    public double getDiffAmountForSupplier(Supplier s) {
+        double net = getNetPriceForSupplier(s);
+        if (net <= 0 || bestPrice <= 0 || bestPrice >= Double.MAX_VALUE)
+            return 0;
+        return net - bestPrice;
+    }
+
+    /**
+     * Returns the percentage difference between the given supplier's price and the
+     * best price.
+     */
+    public double getDiffPctForSupplier(Supplier s) {
+        double net = getNetPriceForSupplier(s);
+        if (net <= 0 || bestPrice <= 0 || bestPrice >= Double.MAX_VALUE)
+            return 0;
+        return ((net - bestPrice) / bestPrice) * 100.0;
     }
 
     public void simulateMargin(double marginPct) {
@@ -207,6 +297,10 @@ public class MasterProduct {
 
     public double getDiffPct() {
         return diffPct;
+    }
+
+    public double getDiffAmount() {
+        return diffAmount;
     }
 
     public double getSimulatedSalePrice() {

@@ -8,6 +8,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ProductTablePanel extends JPanel {
@@ -40,6 +41,9 @@ public class ProductTablePanel extends JPanel {
     private final JComboBox<String> strategyFilter;
     private final JLabel countLabel;
     private final List<MasterProduct> products;
+
+    // Filter change listener
+    private FilterChangeListener filterChangeListener;
 
     public ProductTablePanel(List<MasterProduct> products) {
         this.products = products;
@@ -254,6 +258,20 @@ public class ProductTablePanel extends JPanel {
         add(scrollPane, "grow");
     }
 
+    /**
+     * Register a listener to be notified when the filter changes.
+     */
+    public void setFilterChangeListener(FilterChangeListener listener) {
+        this.filterChangeListener = listener;
+    }
+
+    /**
+     * Trigger the initial filter notification (call after listener is set).
+     */
+    public void fireInitialFilter() {
+        applyFilter();
+    }
+
     private void applyFilter() {
         String text = searchField.getText().trim().toLowerCase();
         boolean stockOnly = stockOnlyCheck.isSelected();
@@ -291,6 +309,27 @@ public class ProductTablePanel extends JPanel {
         });
 
         countLabel.setText(table.getRowCount() + " de " + products.size() + " productos");
+
+        // Notify listener with visible products
+        if (filterChangeListener != null) {
+            List<MasterProduct> visibleProducts = getVisibleProducts();
+            filterChangeListener.onFilterChanged(visibleProducts, strategy != null ? strategy : FILTER_ALL);
+        }
+    }
+
+    /**
+     * Build the list of MasterProduct instances that are currently visible in the
+     * table.
+     */
+    private List<MasterProduct> getVisibleProducts() {
+        List<MasterProduct> visible = new ArrayList<>();
+        for (int viewRow = 0; viewRow < table.getRowCount(); viewRow++) {
+            int modelRow = table.convertRowIndexToModel(viewRow);
+            if (modelRow >= 0 && modelRow < products.size()) {
+                visible.add(products.get(modelRow));
+            }
+        }
+        return visible;
     }
 
     /** Renderer for Double cells: prices and percentages */
