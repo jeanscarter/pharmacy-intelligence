@@ -97,7 +97,7 @@ public class MainFrame extends JFrame {
         JPanel titleBar = new JPanel(new MigLayout("insets 12 24 12 24, fillx", "[]16[]push[]16[]", ""));
         titleBar.setBackground(new Color(35, 38, 46));
 
-        JLabel appTitle = new JLabel("💊 Pharmacy Intelligence");
+        JLabel appTitle = new JLabel(" 💊 Pharmacy Intelligence ");
         appTitle.setFont(new Font("Segoe UI Emoji", Font.BOLD, 22));
         appTitle.setForeground(Color.WHITE);
         titleBar.add(appTitle);
@@ -122,14 +122,14 @@ public class MainFrame extends JFrame {
         titleBar.add(backBtn);
 
         // Export / Open Excel button
-        JButton exportExcelBtn = new JButton("📥 Exportar a Excel");
+        JButton exportExcelBtn = new JButton(" 📥 Exportar a Excel ");
         exportExcelBtn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 12));
         exportExcelBtn.setBackground(new Color(52, 168, 83));
         exportExcelBtn.setForeground(Color.WHITE);
         exportExcelBtn.setFocusPainted(false);
         exportExcelBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         exportExcelBtn.addActionListener(e -> {
-            if (exportExcelBtn.getText().equals("📥 Exportar a Excel")) {
+            if (exportExcelBtn.getText().equals(" 📥 Exportar a Excel ")) {
                 exportExcelBtn.setText("⏳ Exportando...");
                 exportExcelBtn.setEnabled(false);
 
@@ -146,7 +146,7 @@ public class MainFrame extends JFrame {
                     protected void done() {
                         try {
                             File generatedFile = get();
-                            exportExcelBtn.setText("📥 Abrir Excel");
+                            exportExcelBtn.setText(" 📥 Abrir Excel ");
                             exportExcelBtn.setEnabled(true);
 
                             // Remove previous action listeners and add the 'open file' one
@@ -165,7 +165,7 @@ public class MainFrame extends JFrame {
 
                             Toast.show("Excel exportado exitosamente", Toast.Type.SUCCESS);
                         } catch (Exception ex) {
-                            exportExcelBtn.setText("📥 Exportar a Excel");
+                            exportExcelBtn.setText(" 📥 Exportar a Excel ");
                             exportExcelBtn.setEnabled(true);
                             Toast.show("Error exportando a Excel", Toast.Type.ERROR);
                         }

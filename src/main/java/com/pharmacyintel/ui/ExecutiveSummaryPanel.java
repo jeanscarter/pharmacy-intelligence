@@ -42,7 +42,7 @@ public class ExecutiveSummaryPanel extends JPanel {
                 String winPct = totalProducts > 0 ? String.format("%.0f%%", (winCount * 100.0 / totalProducts)) : "—";
 
                 add(createKpiCard(
-                                "🏆", "MEJOR PRECIO",
+                                " 🏆 ", " MEJOR PRECIO ",
                                 bestPrice != null ? bestPrice.getDisplayName() : "N/A",
                                 winCount + " victorias (" + winPct + ")",
                                 bestPrice != null ? bestPrice.getColor() : WIN_COLOR,
@@ -60,7 +60,7 @@ public class ExecutiveSummaryPanel extends JPanel {
                 String lossPct = totalProducts > 0 ? String.format("%.0f%%", (lossCount * 100.0 / totalProducts)) : "—";
 
                 add(createKpiCard(
-                                "⚠️", "PEOR PRECIO",
+                                " ⚠️ ", " PEOR PRECIO ",
                                 worstPrice != null ? worstPrice.getDisplayName() : "N/A",
                                 lossCount + " productos más caros (" + lossPct + ")",
                                 worstPrice != null ? worstPrice.getColor() : LOSS_COLOR,
@@ -72,7 +72,7 @@ public class ExecutiveSummaryPanel extends JPanel {
                 int offerCount = bestDiscount != null ? offers.getOrDefault(bestDiscount, 0) : 0;
 
                 add(createKpiCard(
-                                "💎", "MEJOR DESCUENTO",
+                                " 💎 ", " MEJOR DESCUENTO ",
                                 bestDiscount != null ? bestDiscount.getDisplayName() : "N/A",
                                 offerCount + " productos con oferta",
                                 bestDiscount != null ? bestDiscount.getColor() : DISCOUNT_COLOR,
@@ -94,7 +94,7 @@ public class ExecutiveSummaryPanel extends JPanel {
                                 : "Sin brechas detectadas";
 
                 add(createKpiCard(
-                                "🔔", "OPORTUNIDAD",
+                                " 🔔 ", " OPORTUNIDAD ",
                                 gapCount + " productos",
                                 gapDetail,
                                 GAP_COLOR,

@@ -40,7 +40,7 @@ public class FileUploadPanel extends JPanel {
         setBackground(BG);
 
         // Title
-        JLabel title = new JLabel("💊 Sistema de Inteligencia de Precios — Droguerías");
+        JLabel title = new JLabel(" 💊 Sistema de Inteligencia de Precios — Droguerías ");
         title.setFont(new Font("Segoe UI Emoji", Font.BOLD, 28));
         title.setForeground(Color.WHITE);
         add(title, "center");
@@ -95,7 +95,7 @@ public class FileUploadPanel extends JPanel {
         add(bcvPanel, "growx");
 
         // Process button
-        processBtn = new JButton("🔄  Procesar Datos y Generar Análisis");
+        processBtn = new JButton(" 🔄  Procesar Datos y Generar Análisis ");
         processBtn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 15));
         processBtn.setBackground(ACCENT);
         processBtn.setForeground(Color.WHITE);

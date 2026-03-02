@@ -31,7 +31,7 @@ public class DashboardPanel extends JPanel {
 
         summaryRow.add(createSummaryCard("📦 Total Productos",
                 String.valueOf(engine.getTotalProducts()), ACCENT), "grow");
-        summaryRow.add(createSummaryCard("📊 Productos Comparables",
+        summaryRow.add(createSummaryCard(" 📊 Productos Comparables ",
                 String.valueOf(engine.getComparableProducts()), new Color(52, 168, 83)), "grow");
         summaryRow.add(createSummaryCard("💱 Tasa BCV",
                 String.format("%.4f", GlobalConfig.getInstance().getBcvRate()), new Color(251, 188, 4)), "grow");
@@ -55,7 +55,7 @@ public class DashboardPanel extends JPanel {
         buttonBar.setOpaque(false);
 
         // Charts button
-        JButton chartsBtn = createStyledButton("📊  Ver Gráficos de Análisis", new Color(63, 81, 181));
+        JButton chartsBtn = createStyledButton(" 📊  Ver Gráficos de Análisis ", new Color(63, 81, 181));
         chartsBtn.setPreferredSize(new Dimension(320, 48));
         chartsBtn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 15));
         chartsBtn.addActionListener(e -> {
@@ -76,12 +76,12 @@ public class DashboardPanel extends JPanel {
         buttonBar.add(includeAllCheck);
 
         // Recalculate button
-        JButton refreshBtn = createStyledButton("🔄  Recalcular con Nuevo Margen", ACCENT);
+        JButton refreshBtn = createStyledButton(" 🔄  Recalcular con Nuevo Margen ", ACCENT);
         refreshBtn.addActionListener(e -> recalculateAndRefresh());
         buttonBar.add(refreshBtn);
 
         // Export button
-        JButton exportBtn = createStyledButton("📥  Exportar Excel", new Color(52, 168, 83));
+        JButton exportBtn = createStyledButton(" 📥  Exportar Excel ", new Color(52, 168, 83));
         exportBtn.addActionListener(ev -> exportExcel(engine));
         buttonBar.add(exportBtn);
 

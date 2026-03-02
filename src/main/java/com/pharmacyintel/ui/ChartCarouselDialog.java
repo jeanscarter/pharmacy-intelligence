@@ -28,7 +28,7 @@ public class ChartCarouselDialog extends JDialog {
     private int currentIndex = 0;
 
     public ChartCarouselDialog(Frame owner, ConsolidationEngine engine) {
-        super(owner, "📊 Gráficos de Análisis", true);
+        super(owner, " 📊 Gráficos de Análisis ", true);
         setSize(900, 700);
         setLocationRelativeTo(owner);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
