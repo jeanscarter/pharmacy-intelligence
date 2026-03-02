@@ -179,7 +179,10 @@ public class FileUploadPanel extends JPanel {
 
     private void browseFile(Supplier supplier) {
         JFileChooser chooser = new JFileChooser();
-        chooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
+        File downloadsDir = new File(System.getProperty("user.home"), "Downloads");
+        if (!downloadsDir.exists())
+            downloadsDir = new File(System.getProperty("user.home"), "Descargas");
+        chooser.setCurrentDirectory(downloadsDir.exists() ? downloadsDir : new File(System.getProperty("user.dir")));
         if (supplier == Supplier.DROACTIVA || supplier == Supplier.DROMARKO || supplier == Supplier.P365) {
             chooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
         } else {

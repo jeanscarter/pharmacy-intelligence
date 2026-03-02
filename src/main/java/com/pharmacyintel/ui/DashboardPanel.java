@@ -57,7 +57,7 @@ public class DashboardPanel extends JPanel {
         // Charts button
         JButton chartsBtn = createStyledButton("📊  Ver Gráficos de Análisis", new Color(63, 81, 181));
         chartsBtn.setPreferredSize(new Dimension(320, 48));
-        chartsBtn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 15));
+        chartsBtn.setFont(new Font("Segoe UI", Font.BOLD, 15));
         chartsBtn.addActionListener(e -> {
             Frame owner = (Frame) SwingUtilities.getWindowAncestor(this);
             ChartCarouselDialog dialog = new ChartCarouselDialog(owner, engine);
@@ -67,7 +67,7 @@ public class DashboardPanel extends JPanel {
 
         // Checkbox: Incluir todos los productos
         includeAllCheck = new JCheckBox("Incluir Todos los Productos");
-        includeAllCheck.setFont(new Font("Segoe UI Emoji", Font.BOLD, 13));
+        includeAllCheck.setFont(new Font("Segoe UI", Font.BOLD, 13));
         includeAllCheck.setForeground(new Color(255, 200, 100));
         includeAllCheck.setOpaque(false);
         includeAllCheck.setSelected(false);
@@ -116,7 +116,7 @@ public class DashboardPanel extends JPanel {
         card.setBackground(CARD_BG);
 
         JLabel titleLabel = new JLabel(label);
-        titleLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 12));
+        titleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         titleLabel.setForeground(new Color(150, 160, 175));
         card.add(titleLabel);
 
@@ -130,7 +130,7 @@ public class DashboardPanel extends JPanel {
 
     private JButton createStyledButton(String text, Color bg) {
         JButton btn = new JButton(text);
-        btn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 14));
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 14));
         btn.setBackground(bg);
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
@@ -141,7 +141,10 @@ public class DashboardPanel extends JPanel {
 
     private void exportExcel(ConsolidationEngine engine) {
         JFileChooser chooser = new JFileChooser();
-        chooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
+        File downloadsDir = new File(System.getProperty("user.home"), "Downloads");
+        if (!downloadsDir.exists())
+            downloadsDir = new File(System.getProperty("user.home"), "Descargas");
+        chooser.setCurrentDirectory(downloadsDir.exists() ? downloadsDir : new File(System.getProperty("user.dir")));
         chooser.setDialogTitle("Seleccionar carpeta de destino");
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 
