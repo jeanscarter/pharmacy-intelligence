@@ -49,7 +49,8 @@ public class CobecaParser implements SupplierParser {
                         colDiscount = c;
                     else if (val.contains("existencia") || val.contains("exist"))
                         colStock = c;
-                    else if (val.contains("descripcion") || val.contains("producto") || val.contains("nombre"))
+                    else if (colDesc == -1
+                            && (val.contains("descripcion") || val.equals("producto") || val.equals("nombre")))
                         colDesc = c;
                     // Fallback: if Precio_Referencial not found, use Precio_Referencial_Final
                     if (colPrice == -1) {
