@@ -37,7 +37,7 @@ public class ChartCarouselDialog extends JDialog {
 
         // Title label (top)
         titleLabel = new JLabel("", SwingConstants.CENTER);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        titleLabel.setFont(new Font("Segoe UI Emoji", Font.BOLD, 18));
         titleLabel.setForeground(Color.WHITE);
         add(titleLabel, "growx, h 36!");
 
@@ -132,7 +132,7 @@ public class ChartCarouselDialog extends JDialog {
 
     private JButton createNavButton(String text) {
         JButton btn = new JButton(text);
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        btn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 14));
         btn.setBackground(ACCENT);
         btn.setForeground(Color.WHITE);
         btn.setFocusPainted(false);
