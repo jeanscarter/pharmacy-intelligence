@@ -98,7 +98,7 @@ public class MainFrame extends JFrame {
         titleBar.setBackground(new Color(35, 38, 46));
 
         JLabel appTitle = new JLabel("💊 Pharmacy Intelligence");
-        appTitle.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        appTitle.setFont(new Font("Segoe UI Emoji", Font.BOLD, 22));
         appTitle.setForeground(Color.WHITE);
         titleBar.add(appTitle);
 
@@ -123,7 +123,7 @@ public class MainFrame extends JFrame {
 
         // Export / Open Excel button
         JButton exportExcelBtn = new JButton("📥 Exportar a Excel");
-        exportExcelBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        exportExcelBtn.setFont(new Font("Segoe UI Emoji", Font.BOLD, 12));
         exportExcelBtn.setBackground(new Color(52, 168, 83));
         exportExcelBtn.setForeground(Color.WHITE);
         exportExcelBtn.setFocusPainted(false);

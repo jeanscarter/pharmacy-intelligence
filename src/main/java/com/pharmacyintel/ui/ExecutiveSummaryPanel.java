@@ -25,7 +25,7 @@ public class ExecutiveSummaryPanel extends JPanel {
         private static final Color LOSS_COLOR = new Color(235, 87, 87);
         private static final Color DISCOUNT_COLOR = new Color(100, 160, 255);
         private static final Color GAP_COLOR = new Color(251, 188, 4);
-        private static final Font TITLE_FONT = new Font("Segoe UI", Font.PLAIN, 11);
+        private static final Font TITLE_FONT = new Font("Segoe UI Emoji", Font.PLAIN, 11);
         private static final Font VALUE_FONT = new Font("Segoe UI", Font.BOLD, 20);
         private static final Font DETAIL_FONT = new Font("Segoe UI", Font.PLAIN, 11);
         private static final Font ICON_FONT = new Font("Segoe UI Emoji", Font.PLAIN, 28);
