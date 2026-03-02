@@ -71,8 +71,8 @@ public class MainFrame extends JFrame {
             }
 
             @Override
-            public void onComplete(File excelFile, ConsolidationEngine engine) {
-                SwingUtilities.invokeLater(() -> showDashboard(engine, excelFile));
+            public void onComplete(ConsolidationEngine engine) {
+                SwingUtilities.invokeLater(() -> showDashboard(engine));
             }
         });
 
@@ -87,7 +87,7 @@ public class MainFrame extends JFrame {
         }.execute();
     }
 
-    private void showDashboard(ConsolidationEngine engine, File excelFile) {
+    private void showDashboard(ConsolidationEngine engine) {
         // Build dashboard view
         JPanel dashView = new JPanel(new MigLayout("insets 0, fill, wrap", "[grow]", "[]0[grow]"));
         dashView.setBackground(ROOT_BG);
@@ -120,24 +120,59 @@ public class MainFrame extends JFrame {
         });
         titleBar.add(backBtn);
 
-        // Open Excel button (if file was generated)
-        if (excelFile != null && excelFile.exists()) {
-            JButton openExcel = new JButton("📥 Abrir Excel");
-            openExcel.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            openExcel.setBackground(new Color(52, 168, 83));
-            openExcel.setForeground(Color.WHITE);
-            openExcel.setFocusPainted(false);
-            openExcel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            openExcel.addActionListener(e -> {
-                try {
-                    if (Desktop.isDesktopSupported())
-                        Desktop.getDesktop().open(excelFile);
-                } catch (Exception ex) {
-                    Toast.show("Error al abrir Excel", Toast.Type.ERROR);
-                }
-            });
-            titleBar.add(openExcel);
-        }
+        // Export / Open Excel button
+        JButton exportExcelBtn = new JButton("📥 Exportar a Excel");
+        exportExcelBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        exportExcelBtn.setBackground(new Color(52, 168, 83));
+        exportExcelBtn.setForeground(Color.WHITE);
+        exportExcelBtn.setFocusPainted(false);
+        exportExcelBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        exportExcelBtn.addActionListener(e -> {
+            if (exportExcelBtn.getText().equals("📥 Exportar a Excel")) {
+                exportExcelBtn.setText("⏳ Exportando...");
+                exportExcelBtn.setEnabled(false);
+
+                new SwingWorker<File, Void>() {
+                    @Override
+                    protected File doInBackground() throws Exception {
+                        com.pharmacyintel.report.ExcelExporter exporter = new com.pharmacyintel.report.ExcelExporter();
+                        File outputDir = new File(System.getProperty("user.dir"));
+                        return exporter.export(engine.getMasterCatalog(),
+                                com.pharmacyintel.model.GlobalConfig.getInstance().getBcvRate(), outputDir);
+                    }
+
+                    @Override
+                    protected void done() {
+                        try {
+                            File generatedFile = get();
+                            exportExcelBtn.setText("📥 Abrir Excel");
+                            exportExcelBtn.setEnabled(true);
+
+                            // Remove previous action listeners and add the 'open file' one
+                            for (java.awt.event.ActionListener al : exportExcelBtn.getActionListeners()) {
+                                exportExcelBtn.removeActionListener(al);
+                            }
+
+                            exportExcelBtn.addActionListener(ev -> {
+                                try {
+                                    if (Desktop.isDesktopSupported())
+                                        Desktop.getDesktop().open(generatedFile);
+                                } catch (Exception ex) {
+                                    Toast.show("Error al abrir Excel", Toast.Type.ERROR);
+                                }
+                            });
+
+                            Toast.show("Excel exportado exitosamente", Toast.Type.SUCCESS);
+                        } catch (Exception ex) {
+                            exportExcelBtn.setText("📥 Exportar a Excel");
+                            exportExcelBtn.setEnabled(true);
+                            Toast.show("Error exportando a Excel", Toast.Type.ERROR);
+                        }
+                    }
+                }.execute();
+            }
+        });
+        titleBar.add(exportExcelBtn);
 
         dashView.add(titleBar, "growx, h 56!");
 

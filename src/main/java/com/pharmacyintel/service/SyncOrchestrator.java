@@ -3,7 +3,6 @@ package com.pharmacyintel.service;
 import com.pharmacyintel.engine.ConsolidationEngine;
 import com.pharmacyintel.model.*;
 import com.pharmacyintel.parser.*;
-import com.pharmacyintel.report.ExcelExporter;
 
 import java.io.File;
 import java.util.*;
@@ -15,12 +14,11 @@ public class SyncOrchestrator {
 
         void onError(String stage, String message);
 
-        void onComplete(File excelFile, ConsolidationEngine engine);
+        void onComplete(ConsolidationEngine engine);
     }
 
     private final BcvService bcvService = new BcvService();
     private final ConsolidationEngine engine = new ConsolidationEngine();
-    private final ExcelExporter exporter = new ExcelExporter();
     private ProgressListener listener;
 
     public void setProgressListener(ProgressListener listener) {
@@ -92,15 +90,10 @@ public class SyncOrchestrator {
             reportProgress("Análisis: " + engine.getTotalProducts() + " productos, "
                     + engine.getComparableProducts() + " comparables", 85);
 
-            // Phase 4: Export to Excel
-            reportProgress("Generando reporte Excel...", 90);
-            File excelFile = exporter.export(engine.getMasterCatalog(),
-                    GlobalConfig.getInstance().getBcvRate(), outputDir);
-
-            reportProgress("¡Reporte generado exitosamente!", 100);
+            reportProgress("¡Procesamiento exitoso sin exportación!", 100);
 
             if (listener != null) {
-                listener.onComplete(excelFile, engine);
+                listener.onComplete(engine);
             }
 
         } catch (Exception e) {
