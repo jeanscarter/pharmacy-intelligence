@@ -33,9 +33,6 @@ public class ExecutiveSummaryPanel extends JPanel {
         private JLabel icon4, title4, value4, detail4;
         private JPanel card1, card2, card3, card4;
 
-        // Accent borders
-        private Color accent1 = WIN_COLOR, accent2 = LOSS_COLOR, accent3 = DISCOUNT_COLOR, accent4 = GAP_COLOR;
-
         public ExecutiveSummaryPanel() {
                 setLayout(new MigLayout("insets 4 0 4 0, fillx", "[grow][grow][grow][grow]", "[]"));
                 setOpaque(false);
