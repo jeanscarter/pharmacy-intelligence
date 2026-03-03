@@ -139,7 +139,7 @@ public class MainFrame extends JFrame {
                         com.pharmacyintel.report.ExcelExporter exporter = new com.pharmacyintel.report.ExcelExporter();
                         File outputDir = new File(System.getProperty("user.dir"));
                         return exporter.export(engine.getMasterCatalog(),
-                                com.pharmacyintel.model.GlobalConfig.getInstance().getBcvRate(), outputDir);
+                                com.pharmacyintel.model.GlobalConfig.getInstance().getBcvRate(), outputDir, "Todos");
                     }
 
                     @Override

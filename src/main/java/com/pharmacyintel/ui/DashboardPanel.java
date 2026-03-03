@@ -19,6 +19,7 @@ public class DashboardPanel extends JPanel {
 
     private final ConsolidationEngine engine;
     private final JCheckBox includeAllCheck;
+    private ProductTablePanel tablePanel;
 
     public DashboardPanel(ConsolidationEngine engine) {
         this.engine = engine;
@@ -45,9 +46,8 @@ public class DashboardPanel extends JPanel {
         ExecutiveSummaryPanel execSummary = new ExecutiveSummaryPanel();
         add(execSummary, "growx, h 90!");
 
-        // --- Product Table (expanded) ---
         List<MasterProduct> products = engine.getMasterProductList();
-        ProductTablePanel tablePanel = new ProductTablePanel(products);
+        tablePanel = new ProductTablePanel(products);
         add(tablePanel, "grow");
 
         // --- Connect filter listener: table -> KPI cards ---
@@ -158,8 +158,9 @@ public class DashboardPanel extends JPanel {
         if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 ExcelExporter exporter = new ExcelExporter();
+                String activeFilter = tablePanel != null ? tablePanel.getActiveFilter() : "Todos";
                 File output = exporter.export(engine.getMasterCatalog(),
-                        GlobalConfig.getInstance().getBcvRate(), chooser.getSelectedFile());
+                        GlobalConfig.getInstance().getBcvRate(), chooser.getSelectedFile(), activeFilter);
                 Toast.show("Excel generado: " + output.getName(), Toast.Type.SUCCESS);
 
                 if (Desktop.isDesktopSupported()) {
