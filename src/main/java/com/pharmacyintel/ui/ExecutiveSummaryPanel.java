@@ -120,6 +120,14 @@ public class ExecutiveSummaryPanel extends JPanel {
                         return;
                 }
 
+                // Dedicated mode for "Peor Neto DroActiva"
+                if ("Peor Neto DroActiva".equals(filterName)) {
+                        updateForPeorNeto(visibleProducts);
+                        revalidate();
+                        repaint();
+                        return;
+                }
+
                 // Detect if a specific supplier is selected
                 Supplier targetSupplier = extractSupplier(filterName);
 
@@ -265,6 +273,102 @@ public class ExecutiveSummaryPanel extends JPanel {
 
                 setCard(4, " 📊 ", " POSICIONAMIENTO ",
                                 posCount > 0 ? String.format("%.1f de %d", avgPos, maxProviders) : "N/A",
+                                posCount + " productos con precio",
+                                GAP_COLOR, GAP_COLOR);
+        }
+
+        // ============ PEOR NETO DROACTIVA mode ============
+        private void updateForPeorNeto(List<MasterProduct> products) {
+                Supplier dro = Supplier.DROACTIVA;
+                int total = products.size();
+
+                // Card 1: Products where DroActiva has the WORST (highest) PV
+                int worstPvCount = 0;
+                for (MasterProduct mp : products) {
+                        double pvDro = mp.getBasePriceForSupplier(dro);
+                        if (pvDro <= 0)
+                                continue;
+                        boolean isWorst = true;
+                        boolean hasComparison = false;
+                        for (Supplier s : Supplier.values()) {
+                                if (s == dro)
+                                        continue;
+                                double pvOther = mp.getBasePriceForSupplier(s);
+                                if (pvOther > 0) {
+                                        hasComparison = true;
+                                        if (pvOther >= pvDro) {
+                                                isWorst = false;
+                                                break;
+                                        }
+                                }
+                        }
+                        if (isWorst && hasComparison)
+                                worstPvCount++;
+                }
+                String pvPct = total > 0 ? String.format("%.0f%%", (worstPvCount * 100.0 / total)) : "—";
+                setCard(1, " ⚠️ ", " PEOR PRECIO VENTA ",
+                                String.valueOf(worstPvCount),
+                                worstPvCount + " de " + total + " productos (" + pvPct + ")",
+                                LOSS_COLOR, LOSS_COLOR);
+
+                // Card 2: Products where DroActiva has the WORST (lowest) OF%
+                int worstOfCount = 0;
+                for (MasterProduct mp : products) {
+                        double ofDro = mp.getOfferPctForSupplier(dro);
+                        boolean isWorst = true;
+                        boolean hasComparison = false;
+                        for (Supplier s : Supplier.values()) {
+                                if (s == dro)
+                                        continue;
+                                double ofOther = mp.getOfferPctForSupplier(s);
+                                if (ofOther > 0) {
+                                        hasComparison = true;
+                                        if (ofOther <= ofDro) {
+                                                isWorst = false;
+                                                break;
+                                        }
+                                }
+                        }
+                        if (isWorst && hasComparison)
+                                worstOfCount++;
+                }
+                String ofPct = total > 0 ? String.format("%.0f%%", (worstOfCount * 100.0 / total)) : "—";
+                setCard(2, " 📉 ", " PEOR OFERTA ",
+                                String.valueOf(worstOfCount),
+                                worstOfCount + " de " + total + " productos (" + ofPct + ")",
+                                new Color(255, 152, 0), new Color(255, 152, 0));
+
+                // Card 3: DroActiva discounts active in this set
+                int discountCount = 0;
+                double totalDiscount = 0;
+                for (MasterProduct mp : products) {
+                        SupplierProduct sp = mp.getSupplierPrices().get(dro);
+                        if (sp != null && sp.hasDiscount()) {
+                                discountCount++;
+                                totalDiscount += sp.getOfferPct();
+                        }
+                }
+                double avgDiscount = discountCount > 0 ? totalDiscount / discountCount : 0;
+                setCard(3, " 💎 ", " DESCUENTOS DROACTIVA ",
+                                discountCount + " ofertas",
+                                "Promedio: " + String.format("%.1f%%", avgDiscount),
+                                DISCOUNT_COLOR, DISCOUNT_COLOR);
+
+                // Card 4: Average positioning
+                int posSum = 0, posCount = 0, maxProv = 0;
+                for (MasterProduct mp : products) {
+                        int pos = mp.getPositionForSupplier(dro);
+                        if (pos > 0) {
+                                posSum += pos;
+                                posCount++;
+                                int sc = mp.getSupplierCount();
+                                if (sc > maxProv)
+                                        maxProv = sc;
+                        }
+                }
+                double avgPos = posCount > 0 ? (double) posSum / posCount : 0;
+                setCard(4, " 📊 ", " POSICIONAMIENTO ",
+                                posCount > 0 ? String.format("%.1f de %d", avgPos, maxProv) : "N/A",
                                 posCount + " productos con precio",
                                 GAP_COLOR, GAP_COLOR);
         }

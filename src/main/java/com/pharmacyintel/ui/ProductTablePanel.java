@@ -31,9 +31,8 @@ public class ProductTablePanel extends JPanel {
 
     private static final String FILTER_ALL = "Todos";
     private static final String FILTER_MEJOR_PRECIO = "Mejor Precio DroActiva";
-    private static final String FILTER_MEJOR_NETO = "Mejor Neto DroActiva";
+    private static final String FILTER_MEJOR_OFERTA = "Mejor Oferta DroActiva";
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
-    private static final String FILTER_PEOR_PRECIO = "Peor Precio DroActiva";
 
     // DroActiva column indices for filtering
     private static final int DROACTIVA_IDX = 0; // Supplier.DROACTIVA ordinal
@@ -73,9 +72,8 @@ public class ProductTablePanel extends JPanel {
         strategyFilter.setPreferredSize(new Dimension(250, 28));
         strategyFilter.addItem(FILTER_ALL);
         strategyFilter.addItem(FILTER_MEJOR_PRECIO);
-        strategyFilter.addItem(FILTER_MEJOR_NETO);
+        strategyFilter.addItem(FILTER_MEJOR_OFERTA);
         strategyFilter.addItem(FILTER_PEOR_NETO);
-        strategyFilter.addItem(FILTER_PEOR_PRECIO);
         strategyFilter.putClientProperty("JComponent.roundRect", true);
         toolbar.add(strategyFilter);
 
@@ -312,10 +310,28 @@ public class ProductTablePanel extends JPanel {
                 // Strategy filters
                 if (strategy != null && !FILTER_ALL.equals(strategy)) {
                     String winner = entry.getStringValue(COL_ANALISIS_START);
-                    if (FILTER_MEJOR_PRECIO.equals(strategy) || FILTER_MEJOR_NETO.equals(strategy)) {
+                    if (FILTER_MEJOR_PRECIO.equals(strategy)) {
                         // DroActiva must be the winner
                         if (!droactivaName.equals(winner))
                             return false;
+                    } else if (FILTER_MEJOR_OFERTA.equals(strategy)) {
+                        // DroActiva must have the best OF% among all suppliers
+                        Object ofDroObj = entry.getValue(COL_OFERTA_START + DROACTIVA_IDX);
+                        if (ofDroObj == null)
+                            return false;
+                        double ofDro = ((Number) ofDroObj).doubleValue();
+                        if (ofDro <= 0)
+                            return false;
+                        for (int si = 0; si < SUPPLIER_COUNT; si++) {
+                            if (si == DROACTIVA_IDX)
+                                continue;
+                            Object ofOther = entry.getValue(COL_OFERTA_START + si);
+                            if (ofOther != null) {
+                                double otherOf = ((Number) ofOther).doubleValue();
+                                if (otherOf > ofDro)
+                                    return false;
+                            }
+                        }
                     } else if (FILTER_PEOR_NETO.equals(strategy)) {
                         // DroActiva must NOT be the winner (someone else wins)
                         if (droactivaName.equals(winner))
@@ -323,29 +339,6 @@ public class ProductTablePanel extends JPanel {
                         // DroActiva must have a price
                         Object netVal = entry.getValue(colNetDroactiva);
                         if (netVal == null)
-                            return false;
-                    } else if (FILTER_PEOR_PRECIO.equals(strategy)) {
-                        // DroActiva PV must be > PV of at least one other supplier with stock
-                        Object pvDroObj = entry.getValue(colPvDroactiva);
-                        if (pvDroObj == null)
-                            return false;
-                        double pvDro = ((Number) pvDroObj).doubleValue();
-                        boolean hasCheaper = false;
-                        for (int si = 0; si < SUPPLIER_COUNT; si++) {
-                            if (si == DROACTIVA_IDX)
-                                continue;
-                            Object pvOther = entry.getValue(COL_PRECIO_VENTA_START + si);
-                            Object invOther = entry.getValue(COL_INVENTARIO_START + si);
-                            if (pvOther != null && invOther != null) {
-                                double otherPv = ((Number) pvOther).doubleValue();
-                                int otherInv = ((Number) invOther).intValue();
-                                if (otherPv > 0 && otherPv < pvDro && otherInv > 0) {
-                                    hasCheaper = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (!hasCheaper)
                             return false;
                     }
                 }
