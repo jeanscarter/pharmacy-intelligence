@@ -33,6 +33,7 @@ public class ProductTablePanel extends JPanel {
     private static final String FILTER_MEJOR_PRECIO = "Mejor Precio DroActiva";
     private static final String FILTER_MEJOR_OFERTA = "Mejor Oferta DroActiva";
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
+    private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
 
     // DroActiva column indices for filtering
     private static final int DROACTIVA_IDX = 0; // Supplier.DROACTIVA ordinal
@@ -74,6 +75,7 @@ public class ProductTablePanel extends JPanel {
         strategyFilter.addItem(FILTER_MEJOR_PRECIO);
         strategyFilter.addItem(FILTER_MEJOR_OFERTA);
         strategyFilter.addItem(FILTER_PEOR_NETO);
+        strategyFilter.addItem(FILTER_PEOR_OFERTA);
         strategyFilter.putClientProperty("JComponent.roundRect", true);
         toolbar.add(strategyFilter);
 
@@ -332,12 +334,48 @@ public class ProductTablePanel extends JPanel {
                             }
                         }
                     } else if (FILTER_PEOR_NETO.equals(strategy)) {
-                        // DroActiva must NOT be the winner (someone else wins)
-                        if (droactivaName.equals(winner))
+                        // DroActiva must have the HIGHEST net price (worst/loser)
+                        Object netDroObj = entry.getValue(colNetDroactiva);
+                        if (netDroObj == null)
                             return false;
-                        // DroActiva must have a price
-                        Object netVal = entry.getValue(colNetDroactiva);
-                        if (netVal == null)
+                        double netDro = ((Number) netDroObj).doubleValue();
+                        if (netDro <= 0)
+                            return false;
+                        boolean hasLower = false;
+                        for (int si = 0; si < SUPPLIER_COUNT; si++) {
+                            if (si == DROACTIVA_IDX)
+                                continue;
+                            Object netOther = entry.getValue(COL_PRECIO_CON_OF_START + si);
+                            if (netOther != null) {
+                                double otherNet = ((Number) netOther).doubleValue();
+                                if (otherNet > 0 && otherNet >= netDro)
+                                    return false; // someone else has same or higher net
+                                if (otherNet > 0)
+                                    hasLower = true;
+                            }
+                        }
+                        if (!hasLower)
+                            return false; // no one to compare
+                    } else if (FILTER_PEOR_OFERTA.equals(strategy)) {
+                        // DroActiva must have the LOWEST OF% among suppliers with offers
+                        Object ofDroObj = entry.getValue(COL_OFERTA_START + DROACTIVA_IDX);
+                        double ofDro = 0;
+                        if (ofDroObj != null)
+                            ofDro = ((Number) ofDroObj).doubleValue();
+                        boolean hasHigher = false;
+                        for (int si = 0; si < SUPPLIER_COUNT; si++) {
+                            if (si == DROACTIVA_IDX)
+                                continue;
+                            Object ofOther = entry.getValue(COL_OFERTA_START + si);
+                            if (ofOther != null) {
+                                double otherOf = ((Number) ofOther).doubleValue();
+                                if (otherOf > 0 && otherOf > ofDro)
+                                    hasHigher = true;
+                                if (otherOf > 0 && otherOf <= ofDro)
+                                    return false; // someone else has same or lower
+                            }
+                        }
+                        if (!hasHigher)
                             return false;
                     }
                 }

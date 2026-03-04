@@ -28,6 +28,7 @@ public class ExcelExporter {
     private static final String FILTER_MEJOR_PRECIO = "Mejor Precio DroActiva";
     private static final String FILTER_MEJOR_OFERTA = "Mejor Oferta DroActiva";
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
+    private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
 
     public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir, String activeFilter)
             throws Exception {
@@ -50,7 +51,8 @@ public class ExcelExporter {
 
         boolean isStrategic = FILTER_MEJOR_PRECIO.equals(activeFilter)
                 || FILTER_MEJOR_OFERTA.equals(activeFilter)
-                || FILTER_PEOR_NETO.equals(activeFilter);
+                || FILTER_PEOR_NETO.equals(activeFilter)
+                || FILTER_PEOR_OFERTA.equals(activeFilter);
 
         // --- Title row ---
         Row titleRow = sheet.createRow(0);
@@ -147,15 +149,49 @@ public class ExcelExporter {
                         (MasterProduct mp) -> -mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             case FILTER_PEOR_NETO -> {
-                // DroActiva is NOT the winner and has a price
+                // DroActiva has the HIGHEST net price (true loser)
                 filtered = all.stream()
-                        .filter(mp -> mp.getWinnerSupplier() != null
-                                && mp.getWinnerSupplier() != BASE_SUPPLIER
-                                && mp.getNetPriceForSupplier(BASE_SUPPLIER) > 0)
+                        .filter(mp -> {
+                            double netDro = mp.getNetPriceForSupplier(BASE_SUPPLIER);
+                            if (netDro <= 0)
+                                return false;
+                            boolean hasLower = false;
+                            for (Supplier s : SUPPLIERS) {
+                                if (s == BASE_SUPPLIER)
+                                    continue;
+                                double netOther = mp.getNetPriceForSupplier(s);
+                                if (netOther > 0 && netOther >= netDro)
+                                    return false;
+                                if (netOther > 0)
+                                    hasLower = true;
+                            }
+                            return hasLower;
+                        })
                         .toList();
                 // Sort by highest net of DroActiva first (worst first)
                 comparator = Comparator.comparingDouble(
                         (MasterProduct mp) -> -mp.getNetPriceForSupplier(BASE_SUPPLIER));
+            }
+            case FILTER_PEOR_OFERTA -> {
+                // DroActiva has the LOWEST OF% among suppliers with offers
+                filtered = all.stream()
+                        .filter(mp -> {
+                            double ofDro = mp.getOfferPctForSupplier(BASE_SUPPLIER);
+                            boolean hasHigher = false;
+                            for (Supplier s : SUPPLIERS) {
+                                if (s == BASE_SUPPLIER)
+                                    continue;
+                                double ofOther = mp.getOfferPctForSupplier(s);
+                                if (ofOther > 0 && ofOther > ofDro)
+                                    hasHigher = true;
+                                if (ofOther > 0 && ofOther <= ofDro)
+                                    return false;
+                            }
+                            return hasHigher;
+                        })
+                        .toList();
+                comparator = Comparator.comparingDouble(
+                        (MasterProduct mp) -> mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             default -> {
                 // "Todos" — no filter, worst positioning first
@@ -277,13 +313,17 @@ public class ExcelExporter {
 
         // Determine mode
         boolean isPrecio = FILTER_MEJOR_PRECIO.equals(activeFilter);
-        boolean isOferta = FILTER_MEJOR_OFERTA.equals(activeFilter);
-        // isPeorNeto is the remaining case
+        boolean isMejorOferta = FILTER_MEJOR_OFERTA.equals(activeFilter);
+        boolean isPeorOferta = FILTER_PEOR_OFERTA.equals(activeFilter);
+        boolean isOferta = isMejorOferta || isPeorOferta;
+        // Offer-based exports: only OF% + Inventory (no diff, no positions)
+        boolean skipDiffAndPos = isOferta;
 
-        // Columns: Código | Descripción | [Metric per supplier] | Diferencial $ | %
-        // Diferencial |
-        // [Inv per supplier] | [Posición per supplier]
-        int colCount = 2 + SUPPLIER_COUNT + 2 + SUPPLIER_COUNT + SUPPLIER_COUNT;
+        // Compute colCount
+        int colCount = 2 + SUPPLIER_COUNT + SUPPLIER_COUNT; // barcode+desc + metric + inv
+        if (!skipDiffAndPos) {
+            colCount += 2 + SUPPLIER_COUNT; // diff$ + %diff + positions
+        }
 
         Row header = sheet.createRow(3);
         int col = 0;
@@ -303,18 +343,22 @@ public class ExcelExporter {
             setCellStyled(header, col++, metricPrefix + " " + s.getDisplayName(), supplierHeaderStyle);
         }
 
-        // Differentials
-        setCellStyled(header, col++, "Diferencial $", headerStyle);
-        setCellStyled(header, col++, "% Diferencial", headerStyle);
+        // Differentials (only for non-offer modes)
+        if (!skipDiffAndPos) {
+            setCellStyled(header, col++, "Diferencial $", headerStyle);
+            setCellStyled(header, col++, "% Diferencial", headerStyle);
+        }
 
         // Inventory per supplier
         for (Supplier s : SUPPLIERS) {
             setCellStyled(header, col++, "Inv. " + s.getDisplayName(), stockHeaderStyle);
         }
 
-        // Position per supplier
-        for (Supplier s : SUPPLIERS) {
-            setCellStyled(header, col++, "Pos. " + s.getDisplayName(), headerStyle);
+        // Position per supplier (only for non-offer modes)
+        if (!skipDiffAndPos) {
+            for (Supplier s : SUPPLIERS) {
+                setCellStyled(header, col++, "Pos. " + s.getDisplayName(), headerStyle);
+            }
         }
 
         // --- Data rows ---
@@ -328,7 +372,7 @@ public class ExcelExporter {
 
             // Metric values per supplier
             double droValue = 0;
-            double bestOtherValue = isPrecio || !isOferta ? Double.MAX_VALUE : 0;
+            double bestOtherValue = Double.MAX_VALUE;
 
             for (Supplier s : SUPPLIERS) {
                 double val;
@@ -351,77 +395,54 @@ public class ExcelExporter {
                     }
 
                     // Highlight winner/loser for the metric
-                    if (s == mp.getWinnerSupplier()) {
-                        cell.setCellStyle(isOferta ? pctStyle : winnerStyle);
-                    } else if (s == mp.getLoserSupplier()) {
-                        cell.setCellStyle(isOferta ? pctStyle : loserStyle);
+                    if (!isOferta) {
+                        if (s == mp.getWinnerSupplier()) {
+                            cell.setCellStyle(winnerStyle);
+                        } else if (s == mp.getLoserSupplier()) {
+                            cell.setCellStyle(loserStyle);
+                        }
                     }
                 }
 
                 if (s == BASE_SUPPLIER) {
                     droValue = val;
-                } else if (val > 0) {
-                    if (isOferta) {
-                        // For offers, "next best" is the next highest OF%
-                        // We want to find second-highest offer to compute differential
-                    } else {
-                        // For PV/Neto, "next best" = lowest value among others
-                        if (val < bestOtherValue)
-                            bestOtherValue = val;
+                } else if (val > 0 && !isOferta) {
+                    if (val < bestOtherValue)
+                        bestOtherValue = val;
+                }
+            }
+
+            // Differentials (only for non-offer modes)
+            if (!skipDiffAndPos) {
+                double diffAmt = 0;
+                double diffPctVal = 0;
+                if (isPrecio) {
+                    if (droValue > 0 && bestOtherValue < Double.MAX_VALUE && bestOtherValue > 0) {
+                        diffAmt = droValue - bestOtherValue;
+                        diffPctVal = (diffAmt / droValue);
+                    }
+                } else {
+                    // Peor Neto
+                    double netWinner = mp.getWinnerSupplier() != null
+                            ? mp.getNetPriceForSupplier(mp.getWinnerSupplier())
+                            : 0;
+                    if (droValue > 0 && netWinner > 0) {
+                        diffAmt = droValue - netWinner;
+                        diffPctVal = (diffAmt / droValue);
                     }
                 }
-            }
 
-            // Compute differentials: DroActiva vs next best
-            double diffAmt = 0;
-            double diffPctVal = 0;
-            if (isPrecio) {
-                // Diff = PV DroActiva - PV mejor competidor
-                if (droValue > 0 && bestOtherValue < Double.MAX_VALUE && bestOtherValue > 0) {
-                    diffAmt = droValue - bestOtherValue;
-                    diffPctVal = droValue > 0 ? (diffAmt / droValue) : 0;
-                }
-            } else if (isOferta) {
-                // Diff = OF% DroActiva - OF% del segundo mejor
-                // Find second-highest offer
-                double secondBest = 0;
-                for (Supplier s : SUPPLIERS) {
-                    if (s == BASE_SUPPLIER)
-                        continue;
-                    double of = mp.getOfferPctForSupplier(s);
-                    if (of > secondBest)
-                        secondBest = of;
-                }
-                if (droValue > 0 && secondBest > 0) {
-                    diffAmt = droValue - secondBest;
-                    diffPctVal = (diffAmt / droValue);
-                }
-            } else {
-                // Peor Neto: Diff = Neto DroActiva - Neto Ganador
-                double netWinner = mp.getWinnerSupplier() != null
-                        ? mp.getNetPriceForSupplier(mp.getWinnerSupplier())
-                        : 0;
-                if (droValue > 0 && netWinner > 0) {
-                    diffAmt = droValue - netWinner;
-                    diffPctVal = droValue > 0 ? (diffAmt / droValue) : 0;
-                }
-            }
-
-            Cell diffAmtCell = row.createCell(col++);
-            if (diffAmt != 0) {
-                if (isOferta) {
-                    diffAmtCell.setCellValue(diffAmt / 100.0);
-                    diffAmtCell.setCellStyle(pctStyle);
-                } else {
+                Cell diffAmtCell = row.createCell(col++);
+                if (diffAmt != 0) {
                     diffAmtCell.setCellValue(diffAmt);
                     diffAmtCell.setCellStyle(priceStyle);
                 }
-            }
 
-            Cell diffPctCell = row.createCell(col++);
-            if (diffPctVal != 0) {
-                diffPctCell.setCellValue(isOferta ? diffPctVal : diffPctVal);
-                diffPctCell.setCellStyle(pctStyle);
+                Cell diffPctCell = row.createCell(col++);
+                if (diffPctVal != 0) {
+                    diffPctCell.setCellValue(diffPctVal);
+                    diffPctCell.setCellStyle(pctStyle);
+                }
             }
 
             // Inventory per supplier
@@ -434,19 +455,21 @@ public class ExcelExporter {
                 }
             }
 
-            // Position per supplier
-            for (Supplier s : SUPPLIERS) {
-                int pos = mp.getPositionForSupplier(s);
-                int supplierCount = mp.getSupplierCount();
-                Cell posCell = row.createCell(col++);
-                if (pos > 0) {
-                    posCell.setCellValue(pos + "/" + supplierCount);
-                    if (pos == 1)
-                        posCell.setCellStyle(posWinStyle);
-                    else if (pos >= supplierCount && supplierCount > 1)
-                        posCell.setCellStyle(posLoseStyle);
-                    else
-                        posCell.setCellStyle(posNeutralStyle);
+            // Position per supplier (only for non-offer modes)
+            if (!skipDiffAndPos) {
+                for (Supplier s : SUPPLIERS) {
+                    int pos = mp.getPositionForSupplier(s);
+                    int supplierCount = mp.getSupplierCount();
+                    Cell posCell = row.createCell(col++);
+                    if (pos > 0) {
+                        posCell.setCellValue(pos + "/" + supplierCount);
+                        if (pos == 1)
+                            posCell.setCellStyle(posWinStyle);
+                        else if (pos >= supplierCount && supplierCount > 1)
+                            posCell.setCellStyle(posLoseStyle);
+                        else
+                            posCell.setCellStyle(posNeutralStyle);
+                    }
                 }
             }
         }
