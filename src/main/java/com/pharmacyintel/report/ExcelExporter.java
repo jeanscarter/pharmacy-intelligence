@@ -79,7 +79,7 @@ public class ExcelExporter {
         int colCount;
         if (isReduced) {
             colCount = writeReducedReport(sheet, products, headerStyle, priceStyle, pctStyle,
-                    textStyle, stockCellStyle, winnerStyle, loserStyle);
+                    textStyle, stockCellStyle, winnerStyle, loserStyle, posNeutralStyle, activeFilter);
         } else {
             colCount = writeFullReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
                     winnerStyle, loserStyle, priceStyle, pctStyle, textStyle, stockCellStyle,
@@ -281,13 +281,10 @@ public class ExcelExporter {
     private int writeReducedReport(XSSFSheet sheet, List<MasterProduct> products,
             CellStyle headerStyle, CellStyle priceStyle, CellStyle pctStyle,
             CellStyle textStyle, CellStyle stockCellStyle,
-            CellStyle winnerStyle, CellStyle loserStyle) {
+            CellStyle winnerStyle, CellStyle loserStyle, CellStyle posNeutralStyle, String activeFilter) {
 
-        // Columns: Código | Descripción | PV DroActiva | OF% DroActiva | Neto DroActiva
-        // |
-        // Droguería Ganadora | PV Ganador | OF% Ganador | Neto Ganador |
-        // Inv. DroActiva | Inv. Ganador
-        int colCount = 11;
+        boolean isPeorNeto = FILTER_PEOR_NETO.equals(activeFilter);
+        int colCount = isPeorNeto ? 14 : 11;
 
         Row header = sheet.createRow(3);
         int col = 0;
@@ -300,6 +297,11 @@ public class ExcelExporter {
         setCellStyled(header, col++, "PV Ganador", headerStyle);
         setCellStyled(header, col++, "OF% Ganador", headerStyle);
         setCellStyled(header, col++, "Neto Ganador", headerStyle);
+        if (isPeorNeto) {
+            setCellStyled(header, col++, "Diferencial $", headerStyle);
+            setCellStyled(header, col++, "% Diferencial", headerStyle);
+            setCellStyled(header, col++, "Posición", headerStyle);
+        }
         setCellStyled(header, col++, "Inv. " + BASE_SUPPLIER.getDisplayName(), headerStyle);
         setCellStyled(header, col++, "Inv. Ganador", headerStyle);
 
@@ -367,6 +369,31 @@ public class ExcelExporter {
                     netWinCell.setCellStyle(winnerStyle);
                 }
 
+                if (isPeorNeto) {
+                    double diffAmt = netDro - netWin;
+                    double diffPct = netDro > 0 ? (diffAmt / netDro) : 0;
+
+                    Cell diffAmtCell = row.createCell(col++);
+                    if (diffAmt != 0) {
+                        diffAmtCell.setCellValue(diffAmt);
+                        diffAmtCell.setCellStyle(priceStyle);
+                    }
+
+                    Cell diffPctCell = row.createCell(col++);
+                    if (diffPct != 0) {
+                        diffPctCell.setCellValue(diffPct);
+                        diffPctCell.setCellStyle(pctStyle);
+                    }
+
+                    int basePos = mp.getPositionForSupplier(BASE_SUPPLIER);
+                    int supplierCount = mp.getSupplierCount();
+                    Cell posCell = row.createCell(col++);
+                    if (basePos > 0) {
+                        posCell.setCellValue(basePos + "/" + supplierCount);
+                        posCell.setCellStyle(posNeutralStyle);
+                    }
+                }
+
                 // Inventories
                 Cell invDroCell = row.createCell(col++);
                 if (invDro > 0) {
@@ -380,7 +407,7 @@ public class ExcelExporter {
                     invWinCell.setCellStyle(stockCellStyle);
                 }
             } else {
-                col += 5; // skip winner columns + inventories
+                col += isPeorNeto ? 8 : 5; // skip winner columns + NEW COLUMNS + inventories
             }
         }
 
