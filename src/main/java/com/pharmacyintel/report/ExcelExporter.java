@@ -394,7 +394,7 @@ public class ExcelExporter {
                 }
                 if (droValue > 0 && secondBest > 0) {
                     diffAmt = droValue - secondBest;
-                    diffPctVal = droValue > 0 ? (diffAmt / droValue) / 100.0 : 0;
+                    diffPctVal = (diffAmt / droValue);
                 }
             } else {
                 // Peor Neto: Diff = Neto DroActiva - Neto Ganador

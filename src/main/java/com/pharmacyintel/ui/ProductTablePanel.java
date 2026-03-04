@@ -287,7 +287,6 @@ public class ProductTablePanel extends JPanel {
         String strategy = (String) strategyFilter.getSelectedItem();
 
         // Column indices for DroActiva
-        final int colPvDroactiva = COL_PRECIO_VENTA_START + DROACTIVA_IDX;
         final int colNetDroactiva = COL_PRECIO_CON_OF_START + DROACTIVA_IDX;
         final String droactivaName = Supplier.DROACTIVA.getDisplayName();
 
