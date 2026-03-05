@@ -16,6 +16,7 @@ public class MasterProduct {
     private double simulatedSalePrice;
     private double simulatedMargin;
     private final Map<Supplier, Integer> supplierPositions = new EnumMap<>(Supplier.class);
+    private final Map<Supplier, Integer> supplierPositionsStockOnly = new EnumMap<>(Supplier.class);
 
     public MasterProduct(String barcode, String description) {
         this.barcode = barcode;
@@ -64,6 +65,7 @@ public class MasterProduct {
         loserSupplier = null;
         diffAmount = 0;
         supplierPositions.clear();
+        supplierPositionsStockOnly.clear();
 
         // Collect valid prices
         List<Map.Entry<Supplier, Double>> validPrices = new ArrayList<>();
@@ -93,6 +95,27 @@ public class MasterProduct {
                 rank++;
             }
             supplierPositions.put(validPrices.get(i).getKey(), rank);
+        }
+
+        // --- Dense ranking for STOCK ONLY ---
+        List<Map.Entry<Supplier, Double>> stockPrices = new ArrayList<>();
+        for (var vp : validPrices) {
+            SupplierProduct sp = supplierPrices.get(vp.getKey());
+            if (sp != null && sp.hasStock()) {
+                stockPrices.add(vp);
+            }
+        }
+        if (!stockPrices.isEmpty()) {
+            int rankStock = 1;
+            supplierPositionsStockOnly.put(stockPrices.get(0).getKey(), rankStock);
+            for (int i = 1; i < stockPrices.size(); i++) {
+                double prevPrice = stockPrices.get(i - 1).getValue();
+                double currPrice = stockPrices.get(i).getValue();
+                if (Math.abs(currPrice - prevPrice) > 0.001) {
+                    rankStock++;
+                }
+                supplierPositionsStockOnly.put(stockPrices.get(i).getKey(), rankStock);
+            }
         }
 
         // --- Ghost Price logic: winner must have stock ---
@@ -225,6 +248,10 @@ public class MasterProduct {
 
     public int getPositionForSupplier(Supplier s) {
         return supplierPositions.getOrDefault(s, 0);
+    }
+
+    public int getStockOnlyPositionForSupplier(Supplier s) {
+        return supplierPositionsStockOnly.getOrDefault(s, 0);
     }
 
     public int getStockForSupplier(Supplier s) {

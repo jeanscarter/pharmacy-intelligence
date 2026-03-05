@@ -30,7 +30,8 @@ public class ExcelExporter {
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
     private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
 
-    public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir, String activeFilter)
+    public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir, String activeFilter,
+            boolean stockOnly)
             throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
         XSSFSheet sheet = wb.createSheet("Análisis de Precio");
@@ -83,11 +84,11 @@ public class ExcelExporter {
         if (isStrategic) {
             colCount = writeStrategicReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
                     winnerStyle, loserStyle, priceStyle, pctStyle, textStyle, stockCellStyle,
-                    posWinStyle, posLoseStyle, posNeutralStyle, activeFilter);
+                    posWinStyle, posLoseStyle, posNeutralStyle, activeFilter, stockOnly);
         } else {
             colCount = writeFullReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
                     winnerStyle, loserStyle, priceStyle, pctStyle, textStyle, stockCellStyle,
-                    posWinStyle, posLoseStyle, posNeutralStyle);
+                    posWinStyle, posLoseStyle, posNeutralStyle, stockOnly);
         }
 
         // Merge title
@@ -214,7 +215,7 @@ public class ExcelExporter {
             CellStyle headerStyle, CellStyle supplierHeaderStyle, CellStyle stockHeaderStyle,
             CellStyle winnerStyle, CellStyle loserStyle, CellStyle priceStyle,
             CellStyle pctStyle, CellStyle textStyle, CellStyle stockCellStyle,
-            CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle) {
+            CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle, boolean stockOnly) {
 
         int colCount = 2 + (SUPPLIER_COUNT * 4) + 7;
 
@@ -248,7 +249,7 @@ public class ExcelExporter {
 
             for (Supplier s : SUPPLIERS) {
                 col = writeSupplierBlock(row, col, mp, s, priceStyle, pctStyle, stockCellStyle, winnerStyle,
-                        loserStyle);
+                        loserStyle, stockOnly);
             }
 
             // Analytics
@@ -309,7 +310,7 @@ public class ExcelExporter {
             CellStyle winnerStyle, CellStyle loserStyle, CellStyle priceStyle,
             CellStyle pctStyle, CellStyle textStyle, CellStyle stockCellStyle,
             CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle,
-            String activeFilter) {
+            String activeFilter, boolean stockOnly) {
 
         // Determine mode
         boolean isPrecio = FILTER_MEJOR_PRECIO.equals(activeFilter);
@@ -382,6 +383,10 @@ public class ExcelExporter {
                     val = mp.getOfferPctForSupplier(s);
                 } else {
                     val = mp.getNetPriceForSupplier(s);
+                }
+
+                if (stockOnly && mp.getStockForSupplier(s) <= 0) {
+                    val = 0;
                 }
 
                 Cell cell = row.createCell(col++);
@@ -458,7 +463,7 @@ public class ExcelExporter {
             // Position per supplier (only for non-offer modes)
             if (!skipDiffAndPos) {
                 for (Supplier s : SUPPLIERS) {
-                    int pos = mp.getPositionForSupplier(s);
+                    int pos = stockOnly ? mp.getStockOnlyPositionForSupplier(s) : mp.getPositionForSupplier(s);
                     int supplierCount = mp.getSupplierCount();
                     Cell posCell = row.createCell(col++);
                     if (pos > 0) {
@@ -484,11 +489,18 @@ public class ExcelExporter {
     /** Write PV, OF%, Neto, Stock for a single supplier */
     private int writeSupplierBlock(Row row, int col, MasterProduct mp, Supplier s,
             CellStyle priceStyle, CellStyle pctStyle, CellStyle stockCellStyle,
-            CellStyle winnerStyle, CellStyle loserStyle) {
+            CellStyle winnerStyle, CellStyle loserStyle, boolean stockOnly) {
+        int stock = mp.getStockForSupplier(s);
+
         double basePrice = mp.getBasePriceForSupplier(s);
         double offerPct = mp.getOfferPctForSupplier(s);
         double netPrice = mp.getNetPriceForSupplier(s);
-        int stock = mp.getStockForSupplier(s);
+
+        if (stockOnly && stock <= 0) {
+            basePrice = 0;
+            offerPct = 0;
+            netPrice = 0;
+        }
 
         Cell pvCell = row.createCell(col++);
         if (basePrice > 0) {

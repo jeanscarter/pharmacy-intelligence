@@ -159,8 +159,9 @@ public class DashboardPanel extends JPanel {
             try {
                 ExcelExporter exporter = new ExcelExporter();
                 String activeFilter = tablePanel != null ? tablePanel.getActiveFilter() : "Todos";
+                boolean stockOnly = tablePanel != null && tablePanel.isStockOnly();
                 File output = exporter.export(engine.getMasterCatalog(),
-                        GlobalConfig.getInstance().getBcvRate(), chooser.getSelectedFile(), activeFilter);
+                        GlobalConfig.getInstance().getBcvRate(), chooser.getSelectedFile(), activeFilter, stockOnly);
                 Toast.show("Excel generado: " + output.getName(), Toast.Type.SUCCESS);
 
                 if (Desktop.isDesktopSupported()) {

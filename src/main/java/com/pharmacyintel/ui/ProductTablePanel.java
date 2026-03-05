@@ -175,6 +175,40 @@ public class ProductTablePanel extends JPanel {
                     return String.class;
                 return Double.class;
             }
+
+            @Override
+            public Object getValueAt(int row, int column) {
+                if (column >= COL_PRECIO_VENTA_START && column < COL_POSICION_START) {
+                    MasterProduct mp = products.get(row);
+                    int supplierIdx = -1;
+                    if (column >= COL_PRECIO_CON_OF_START) {
+                        supplierIdx = column - COL_PRECIO_CON_OF_START;
+                    } else if (column >= COL_OFERTA_START) {
+                        supplierIdx = column - COL_OFERTA_START;
+                    } else if (column >= COL_PRECIO_VENTA_START) {
+                        supplierIdx = column - COL_PRECIO_VENTA_START;
+                    }
+                    if (supplierIdx >= 0 && supplierIdx < SUPPLIERS.length) {
+                        Supplier s = SUPPLIERS[supplierIdx];
+                        if (stockOnlyCheck.isSelected() && mp.getStockForSupplier(s) <= 0) {
+                            return null;
+                        }
+                    }
+                }
+
+                if (column >= COL_POSICION_START && column < COL_ANALISIS_START) {
+                    MasterProduct mp = products.get(row);
+                    int supplierIdx = column - COL_POSICION_START;
+                    Supplier s = SUPPLIERS[supplierIdx];
+                    if (stockOnlyCheck.isSelected() && mp.getStockForSupplier(s) <= 0) {
+                        return null;
+                    }
+                    int pos = stockOnlyCheck.isSelected() ? mp.getStockOnlyPositionForSupplier(s)
+                            : mp.getPositionForSupplier(s);
+                    return pos > 0 ? pos : null;
+                }
+                return super.getValueAt(row, column);
+            }
         };
 
         table = new JTable(model);
@@ -250,7 +284,10 @@ public class ProductTablePanel extends JPanel {
             }
         };
         searchField.getDocument().addDocumentListener(docListener);
-        stockOnlyCheck.addItemListener(e -> applyFilter());
+        stockOnlyCheck.addItemListener(e -> {
+            model.fireTableDataChanged();
+            applyFilter();
+        });
         strategyFilter.addActionListener(e -> applyFilter());
 
         JScrollPane scrollPane = new JScrollPane(table,
@@ -281,6 +318,10 @@ public class ProductTablePanel extends JPanel {
     public String getActiveFilter() {
         String f = (String) strategyFilter.getSelectedItem();
         return f != null ? f : FILTER_ALL;
+    }
+
+    public boolean isStockOnly() {
+        return stockOnlyCheck.isSelected();
     }
 
     private void applyFilter() {
