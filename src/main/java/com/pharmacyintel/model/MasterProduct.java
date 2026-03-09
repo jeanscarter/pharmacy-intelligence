@@ -9,12 +9,19 @@ public class MasterProduct {
 
     // Computed fields
     private double bestPrice = Double.MAX_VALUE;
+    private double bestPriceStockOnly = Double.MAX_VALUE;
     private Supplier winnerSupplier;
+    private Supplier winnerSupplierStockOnly;
     private Supplier loserSupplier;
+    private Supplier loserSupplierStockOnly;
     private double diffPct;
-    private double diffAmount; // NEW: absolute USD difference between 2nd best and best
+    private double diffPctStockOnly;
+    private double diffAmount;
+    private double diffAmountStockOnly;
     private double simulatedSalePrice;
+    private double simulatedSalePriceStockOnly;
     private double simulatedMargin;
+    private double simulatedMarginStockOnly;
     private final Map<Supplier, Integer> supplierPositions = new EnumMap<>(Supplier.class);
     private final Map<Supplier, Integer> supplierPositionsStockOnly = new EnumMap<>(Supplier.class);
 
@@ -61,9 +68,15 @@ public class MasterProduct {
 
     public void computeCompetitiveness() {
         bestPrice = Double.MAX_VALUE;
+        bestPriceStockOnly = Double.MAX_VALUE;
         winnerSupplier = null;
+        winnerSupplierStockOnly = null;
         loserSupplier = null;
+        loserSupplierStockOnly = null;
         diffAmount = 0;
+        diffAmountStockOnly = 0;
+        diffPct = 0;
+        diffPctStockOnly = 0;
         supplierPositions.clear();
         supplierPositionsStockOnly.clear();
 
@@ -118,79 +131,47 @@ public class MasterProduct {
             }
         }
 
-        // --- Ghost Price logic: winner must have stock ---
-        // Find the first supplier (by lowest price) that actually has stock
-        Supplier effectiveWinner = null;
-        double effectiveBestPrice = Double.MAX_VALUE;
-        for (var vp : validPrices) {
-            SupplierProduct sp = supplierPrices.get(vp.getKey());
-            if (sp != null && sp.hasStock()) {
-                effectiveWinner = vp.getKey();
-                effectiveBestPrice = vp.getValue();
-                break;
-            }
-        }
-        // Fallback: if nobody has stock, use the absolute lowest price
-        if (effectiveWinner == null) {
-            effectiveWinner = validPrices.get(0).getKey();
-            effectiveBestPrice = validPrices.get(0).getValue();
-        }
+        // --- NORMAL CALCULATIONS ---
+        if (!validPrices.isEmpty()) {
+            winnerSupplier = validPrices.get(0).getKey();
+            bestPrice = validPrices.get(0).getValue();
 
-        bestPrice = effectiveBestPrice;
-        winnerSupplier = effectiveWinner;
+            if (validPrices.size() >= 2) {
+                loserSupplier = validPrices.get(validPrices.size() - 1).getKey();
+                if (loserSupplier == winnerSupplier)
+                    loserSupplier = null;
 
-        // --- Loser: highest price among suppliers WITH stock ---
-        Supplier effectiveLoser = null;
-        for (int i = validPrices.size() - 1; i >= 0; i--) {
-            Supplier s = validPrices.get(i).getKey();
-            if (s == winnerSupplier)
-                continue;
-            SupplierProduct sp = supplierPrices.get(s);
-            if (sp != null && sp.hasStock()) {
-                effectiveLoser = s;
-                break;
-            }
-        }
-        // Fallback: if nobody else has stock, use highest price regardless
-        if (effectiveLoser == null && validPrices.size() > 1) {
-            effectiveLoser = validPrices.get(validPrices.size() - 1).getKey();
-            if (effectiveLoser == winnerSupplier)
-                effectiveLoser = null;
-        }
-        loserSupplier = effectiveLoser;
-
-        // DIF% = difference between best and second best (with stock)
-        if (validPrices.size() >= 2) {
-            // Find second best price (with stock, different from winner)
-            double secondBest = -1;
-            for (var vp : validPrices) {
-                if (vp.getKey() != winnerSupplier) {
-                    SupplierProduct sp = supplierPrices.get(vp.getKey());
-                    if (sp != null && sp.hasStock()) {
-                        secondBest = vp.getValue();
-                        break;
-                    }
-                }
-            }
-            // Fallback: use absolute second if no stocked second exists
-            if (secondBest < 0) {
-                for (var vp : validPrices) {
-                    if (vp.getKey() != winnerSupplier) {
-                        secondBest = vp.getValue();
-                        break;
-                    }
-                }
-            }
-            if (secondBest > 0 && bestPrice > 0) {
-                diffPct = ((secondBest - bestPrice) / bestPrice) * 100.0;
+                double secondBest = validPrices.get(1).getValue();
                 diffAmount = secondBest - bestPrice;
-            } else {
-                diffPct = 0;
-                diffAmount = 0;
+                if (bestPrice > 0) {
+                    diffPct = (diffAmount / bestPrice) * 100.0;
+                }
             }
-        } else {
-            diffPct = 0;
-            diffAmount = 0;
+        }
+
+        // --- STOCK ONLY CALCULATIONS ---
+        if (!stockPrices.isEmpty()) {
+            winnerSupplierStockOnly = stockPrices.get(0).getKey();
+            bestPriceStockOnly = stockPrices.get(0).getValue();
+
+            if (stockPrices.size() >= 2) {
+                loserSupplierStockOnly = stockPrices.get(stockPrices.size() - 1).getKey();
+                if (loserSupplierStockOnly == winnerSupplierStockOnly)
+                    loserSupplierStockOnly = null;
+
+                double secondBestStock = stockPrices.get(1).getValue();
+                diffAmountStockOnly = secondBestStock - bestPriceStockOnly;
+                if (bestPriceStockOnly > 0) {
+                    diffPctStockOnly = (diffAmountStockOnly / bestPriceStockOnly) * 100.0;
+                }
+            }
+        } else if (!validPrices.isEmpty()) {
+            // fallback if no one has stock
+            bestPriceStockOnly = bestPrice;
+            winnerSupplierStockOnly = winnerSupplier;
+            loserSupplierStockOnly = loserSupplier;
+            diffAmountStockOnly = diffAmount;
+            diffPctStockOnly = diffPct;
         }
     }
 
@@ -222,6 +203,10 @@ public class MasterProduct {
         if (bestPrice < Double.MAX_VALUE && bestPrice > 0) {
             simulatedSalePrice = bestPrice * (1.0 + marginPct / 100.0);
             simulatedMargin = simulatedSalePrice - bestPrice;
+        }
+        if (bestPriceStockOnly < Double.MAX_VALUE && bestPriceStockOnly > 0) {
+            simulatedSalePriceStockOnly = bestPriceStockOnly * (1.0 + marginPct / 100.0);
+            simulatedMarginStockOnly = simulatedSalePriceStockOnly - bestPriceStockOnly;
         }
     }
 
@@ -280,10 +265,6 @@ public class MasterProduct {
         return best;
     }
 
-    public Supplier getWorstPriceSupplier() {
-        return loserSupplier;
-    }
-
     // --- Getters ---
     public String getBarcode() {
         return barcode;
@@ -310,8 +291,25 @@ public class MasterProduct {
         return bestPrice == Double.MAX_VALUE ? 0 : bestPrice;
     }
 
+    public double getBestPrice(boolean stockOnly) {
+        double bp = stockOnly ? bestPriceStockOnly : bestPrice;
+        return bp == Double.MAX_VALUE ? 0 : bp;
+    }
+
     public Supplier getWinnerSupplier() {
         return winnerSupplier;
+    }
+
+    public Supplier getWinnerSupplier(boolean stockOnly) {
+        return stockOnly ? winnerSupplierStockOnly : winnerSupplier;
+    }
+
+    public Supplier getWorstPriceSupplier() {
+        return loserSupplier;
+    }
+
+    public Supplier getWorstPriceSupplier(boolean stockOnly) {
+        return stockOnly ? loserSupplierStockOnly : loserSupplier;
     }
 
     public Supplier getLoserSupplier() {
@@ -326,16 +324,32 @@ public class MasterProduct {
         return diffPct;
     }
 
+    public double getDiffPct(boolean stockOnly) {
+        return stockOnly ? diffPctStockOnly : diffPct;
+    }
+
     public double getDiffAmount() {
         return diffAmount;
+    }
+
+    public double getDiffAmount(boolean stockOnly) {
+        return stockOnly ? diffAmountStockOnly : diffAmount;
     }
 
     public double getSimulatedSalePrice() {
         return simulatedSalePrice;
     }
 
+    public double getSimulatedSalePrice(boolean stockOnly) {
+        return stockOnly ? simulatedSalePriceStockOnly : simulatedSalePrice;
+    }
+
     public double getSimulatedMargin() {
         return simulatedMargin;
+    }
+
+    public double getSimulatedMargin(boolean stockOnly) {
+        return stockOnly ? simulatedMarginStockOnly : simulatedMargin;
     }
 
     public Map<Supplier, Integer> getSupplierPositions() {

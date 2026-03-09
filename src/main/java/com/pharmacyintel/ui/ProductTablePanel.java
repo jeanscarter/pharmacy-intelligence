@@ -429,7 +429,7 @@ public class ProductTablePanel extends JPanel {
         // Notify listener with visible products
         if (filterChangeListener != null) {
             List<MasterProduct> visibleProducts = getVisibleProducts();
-            filterChangeListener.onFilterChanged(visibleProducts, strategy != null ? strategy : FILTER_ALL);
+            filterChangeListener.onFilterChanged(visibleProducts, strategy != null ? strategy : FILTER_ALL, stockOnly);
         }
     }
 

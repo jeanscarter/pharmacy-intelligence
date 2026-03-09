@@ -51,8 +51,8 @@ public class DashboardPanel extends JPanel {
         add(tablePanel, "grow");
 
         // --- Connect filter listener: table -> KPI cards ---
-        tablePanel.setFilterChangeListener((visibleProducts, filterName) -> {
-            execSummary.updateMetrics(visibleProducts, filterName);
+        tablePanel.setFilterChangeListener((visibleProducts, filterName, stockOnly) -> {
+            execSummary.updateMetrics(visibleProducts, filterName, stockOnly);
         });
         // Fire initial update
         tablePanel.fireInitialFilter();

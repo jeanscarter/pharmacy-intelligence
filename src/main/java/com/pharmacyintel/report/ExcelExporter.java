@@ -270,30 +270,30 @@ public class ExcelExporter {
             row.createCell(col++).setCellValue(supplierCount);
 
             Cell winnerCell = row.createCell(col++);
-            if (mp.getWinnerSupplier() != null)
-                winnerCell.setCellValue(mp.getWinnerSupplier().getDisplayName());
+            if (mp.getWinnerSupplier(stockOnly) != null)
+                winnerCell.setCellValue(mp.getWinnerSupplier(stockOnly).getDisplayName());
 
             Cell diffPctCell = row.createCell(col++);
-            if (mp.getDiffPct() > 0) {
-                diffPctCell.setCellValue(mp.getDiffPct() / 100.0);
+            if (mp.getDiffPct(stockOnly) > 0) {
+                diffPctCell.setCellValue(mp.getDiffPct(stockOnly) / 100.0);
                 diffPctCell.setCellStyle(pctStyle);
             }
 
             Cell diffAmtCell = row.createCell(col++);
-            if (mp.getDiffAmount() > 0) {
-                diffAmtCell.setCellValue(mp.getDiffAmount());
+            if (mp.getDiffAmount(stockOnly) > 0) {
+                diffAmtCell.setCellValue(mp.getDiffAmount(stockOnly));
                 diffAmtCell.setCellStyle(priceStyle);
             }
 
             Cell salePriceCell = row.createCell(col++);
-            if (mp.getSimulatedSalePrice() > 0) {
-                salePriceCell.setCellValue(mp.getSimulatedSalePrice());
+            if (mp.getSimulatedSalePrice(stockOnly) > 0) {
+                salePriceCell.setCellValue(mp.getSimulatedSalePrice(stockOnly));
                 salePriceCell.setCellStyle(priceStyle);
             }
 
             Cell marginCell = row.createCell(col++);
-            if (mp.getSimulatedMargin() > 0) {
-                marginCell.setCellValue(mp.getSimulatedMargin());
+            if (mp.getSimulatedMargin(stockOnly) > 0) {
+                marginCell.setCellValue(mp.getSimulatedMargin(stockOnly));
                 marginCell.setCellStyle(priceStyle);
             }
         }
@@ -401,9 +401,9 @@ public class ExcelExporter {
 
                     // Highlight winner/loser for the metric
                     if (!isOferta) {
-                        if (s == mp.getWinnerSupplier()) {
+                        if (s == mp.getWinnerSupplier(stockOnly)) {
                             cell.setCellStyle(winnerStyle);
-                        } else if (s == mp.getLoserSupplier()) {
+                        } else if (s == mp.getWorstPriceSupplier(stockOnly)) {
                             cell.setCellStyle(loserStyle);
                         }
                     }
@@ -428,8 +428,8 @@ public class ExcelExporter {
                     }
                 } else {
                     // Peor Neto
-                    double netWinner = mp.getWinnerSupplier() != null
-                            ? mp.getNetPriceForSupplier(mp.getWinnerSupplier())
+                    double netWinner = mp.getWinnerSupplier(stockOnly) != null
+                            ? mp.getNetPriceForSupplier(mp.getWinnerSupplier(stockOnly))
                             : 0;
                     if (droValue > 0 && netWinner > 0) {
                         diffAmt = droValue - netWinner;

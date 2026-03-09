@@ -10,5 +10,5 @@ import java.util.List;
  */
 @FunctionalInterface
 public interface FilterChangeListener {
-    void onFilterChanged(List<MasterProduct> visibleProducts, String filterName);
+    void onFilterChanged(List<MasterProduct> visibleProducts, String filterName, boolean stockOnly);
 }

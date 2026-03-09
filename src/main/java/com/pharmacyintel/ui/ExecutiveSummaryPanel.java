@@ -114,7 +114,7 @@ public class ExecutiveSummaryPanel extends JPanel {
         /**
          * Update KPIs dynamically based on the visible products and the current filter.
          */
-        public void updateMetrics(List<MasterProduct> visibleProducts, String filterName) {
+        public void updateMetrics(List<MasterProduct> visibleProducts, String filterName, boolean stockOnly) {
                 if (visibleProducts == null || visibleProducts.isEmpty()) {
                         clearCards();
                         return;
@@ -132,9 +132,9 @@ public class ExecutiveSummaryPanel extends JPanel {
                 Supplier targetSupplier = extractSupplier(filterName);
 
                 if (targetSupplier != null) {
-                        updateForSupplier(visibleProducts, targetSupplier);
+                        updateForSupplier(visibleProducts, targetSupplier, stockOnly);
                 } else {
-                        updateGlobal(visibleProducts);
+                        updateGlobal(visibleProducts, stockOnly);
                 }
 
                 revalidate();
@@ -142,7 +142,7 @@ public class ExecutiveSummaryPanel extends JPanel {
         }
 
         // ============ GLOBAL mode (filter = "Todos") ============
-        private void updateGlobal(List<MasterProduct> products) {
+        private void updateGlobal(List<MasterProduct> products, boolean stockOnly) {
                 int total = products.size();
 
                 // KPI 1: Best Price Supplier (most wins)
@@ -150,8 +150,8 @@ public class ExecutiveSummaryPanel extends JPanel {
                 for (Supplier s : Supplier.values())
                         wins.put(s, 0);
                 for (MasterProduct mp : products) {
-                        if (mp.getWinnerSupplier() != null)
-                                wins.merge(mp.getWinnerSupplier(), 1, Integer::sum);
+                        if (mp.getWinnerSupplier(stockOnly) != null)
+                                wins.merge(mp.getWinnerSupplier(stockOnly), 1, Integer::sum);
                 }
                 Supplier bestPrice = wins.entrySet().stream()
                                 .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
@@ -168,8 +168,8 @@ public class ExecutiveSummaryPanel extends JPanel {
                 for (Supplier s : Supplier.values())
                         losses.put(s, 0);
                 for (MasterProduct mp : products) {
-                        if (mp.getWorstPriceSupplier() != null)
-                                losses.merge(mp.getWorstPriceSupplier(), 1, Integer::sum);
+                        if (mp.getWorstPriceSupplier(stockOnly) != null)
+                                losses.merge(mp.getWorstPriceSupplier(stockOnly), 1, Integer::sum);
                 }
                 Supplier worstPrice = losses.entrySet().stream()
                                 .filter(e -> e.getValue() > 0)
@@ -209,13 +209,13 @@ public class ExecutiveSummaryPanel extends JPanel {
         }
 
         // ============ SUPPLIER-SPECIFIC mode ============
-        private void updateForSupplier(List<MasterProduct> products, Supplier target) {
+        private void updateForSupplier(List<MasterProduct> products, Supplier target, boolean stockOnly) {
                 int total = products.size();
 
                 // KPI 1: Victories — products where this supplier wins
                 int victories = 0;
                 for (MasterProduct mp : products) {
-                        if (target == mp.getWinnerSupplier())
+                        if (target == mp.getWinnerSupplier(stockOnly))
                                 victories++;
                 }
                 String victPct = total > 0 ? String.format("%.0f%%", (victories * 100.0 / total)) : "—";
@@ -228,7 +228,7 @@ public class ExecutiveSummaryPanel extends JPanel {
                 // KPI 2: Defeats — products where this supplier is the loser
                 int defeats = 0;
                 for (MasterProduct mp : products) {
-                        if (target == mp.getWorstPriceSupplier())
+                        if (target == mp.getWorstPriceSupplier(stockOnly))
                                 defeats++;
                 }
                 String defPct = total > 0 ? String.format("%.0f%%", (defeats * 100.0 / total)) : "—";
@@ -260,7 +260,8 @@ public class ExecutiveSummaryPanel extends JPanel {
                 int posCount = 0;
                 int maxProviders = 0;
                 for (MasterProduct mp : products) {
-                        int pos = mp.getPositionForSupplier(target);
+                        int pos = stockOnly ? mp.getStockOnlyPositionForSupplier(target)
+                                        : mp.getPositionForSupplier(target);
                         if (pos > 0) {
                                 posSum += pos;
                                 posCount++;
