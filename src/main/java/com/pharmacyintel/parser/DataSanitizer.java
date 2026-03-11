@@ -71,7 +71,15 @@ public final class DataSanitizer {
     public static int parseStock(String raw) {
         if (raw == null || raw.isBlank())
             return 0;
-        String cleaned = raw.trim().replaceAll("[^0-9\\-]", "");
+        String trimmed = raw.trim();
+        // First, try parsing as a decimal (handles "150.0" from numeric Excel cells)
+        try {
+            double d = Double.parseDouble(trimmed);
+            return (int) d;
+        } catch (NumberFormatException ignored) {
+        }
+        // Fallback: strip non-numeric characters
+        String cleaned = trimmed.replaceAll("[^0-9\\-]", "");
         if (cleaned.isEmpty())
             return 0;
         try {

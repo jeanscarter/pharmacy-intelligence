@@ -128,6 +128,14 @@ public class ExecutiveSummaryPanel extends JPanel {
                         return;
                 }
 
+                // Dedicated mode for "Productos sin Inventario"
+                if ("Productos sin Inventario".equals(filterName)) {
+                        updateForSinInventario(visibleProducts);
+                        revalidate();
+                        repaint();
+                        return;
+                }
+
                 // Detect if a specific supplier is selected
                 Supplier targetSupplier = extractSupplier(filterName);
 
@@ -371,6 +379,72 @@ public class ExecutiveSummaryPanel extends JPanel {
                 setCard(4, " 📊 ", " POSICIONAMIENTO ",
                                 posCount > 0 ? String.format("%.1f de %d", avgPos, maxProv) : "N/A",
                                 posCount + " productos con precio",
+                                GAP_COLOR, GAP_COLOR);
+        }
+
+        // ============ PRODUCTOS SIN INVENTARIO mode ============
+        private void updateForSinInventario(List<MasterProduct> products) {
+                Supplier dro = Supplier.DROACTIVA;
+                int total = products.size();
+
+                // Card 1: Total products DroActiva is missing
+                setCard(1, " 📦 ", " PRODUCTOS FALTANTES ",
+                                String.valueOf(total),
+                                "DroActiva no tiene " + total + " productos que sí tienen otras droguerías",
+                                LOSS_COLOR, LOSS_COLOR);
+
+                // Build per-supplier counts: how many of these products each other supplier carries
+                java.util.Map<Supplier, Integer> supplierCarries = new java.util.EnumMap<>(Supplier.class);
+                for (Supplier s : Supplier.values()) {
+                        if (s == dro) continue;
+                        supplierCarries.put(s, 0);
+                }
+                for (MasterProduct mp : products) {
+                        for (var entry : mp.getSupplierPrices().entrySet()) {
+                                if (entry.getKey() != dro && entry.getValue().getStock() > 0) {
+                                        supplierCarries.merge(entry.getKey(), 1, Integer::sum);
+                                }
+                        }
+                }
+
+                // Card 2: Supplier with the most coverage of missing products
+                Supplier topCoverage = supplierCarries.entrySet().stream()
+                                .max(java.util.Map.Entry.comparingByValue())
+                                .map(java.util.Map.Entry::getKey).orElse(null);
+                int topCount = topCoverage != null ? supplierCarries.getOrDefault(topCoverage, 0) : 0;
+
+                setCard(2, " 🏪 ", " MAYOR COBERTURA ",
+                                topCoverage != null ? topCoverage.getDisplayName() : "N/A",
+                                topCount + " de " + total + " productos disponibles",
+                                topCoverage != null ? topCoverage.getColor() : WIN_COLOR, WIN_COLOR);
+
+                // Card 3: Per-supplier breakdown
+                StringBuilder breakdown = new StringBuilder();
+                for (var entry : supplierCarries.entrySet()) {
+                        if (entry.getValue() > 0) {
+                                if (breakdown.length() > 0) breakdown.append(" | ");
+                                breakdown.append(entry.getKey().getDisplayName()).append(": ").append(entry.getValue());
+                        }
+                }
+                setCard(3, " 📊 ", " DESGLOSE POR DROGUERÍA ",
+                                supplierCarries.values().stream().mapToInt(i -> i).sum() + " registros",
+                                breakdown.length() > 0 ? breakdown.toString() : "Sin datos",
+                                DISCOUNT_COLOR, DISCOUNT_COLOR);
+
+                // Card 4: Average best net price of these missing products
+                double totalNet = 0;
+                int priceCount = 0;
+                for (MasterProduct mp : products) {
+                        double best = mp.getBestPrice();
+                        if (best > 0) {
+                                totalNet += best;
+                                priceCount++;
+                        }
+                }
+                double avgNet = priceCount > 0 ? totalNet / priceCount : 0;
+                setCard(4, " 💲 ", " PRECIO PROMEDIO ",
+                                priceCount > 0 ? String.format("$%.2f", avgNet) : "N/A",
+                                priceCount + " productos con precio disponible",
                                 GAP_COLOR, GAP_COLOR);
         }
 

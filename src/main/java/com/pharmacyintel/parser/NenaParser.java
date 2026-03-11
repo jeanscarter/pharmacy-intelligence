@@ -51,22 +51,24 @@ public class NenaParser implements SupplierParser {
                             .replaceAll("[óòö]", "o")
                             .replaceAll("[úùü]", "u");
 
-                    if (lower.contains("barra") || lower.contains("cod. barra") || lower.contains("codigo barra")
+                    if (tempBarcode == -1 && (lower.contains("barra") || lower.contains("cod. barra") || lower.contains("codigo barra")
                             || lower.contains("ean") || lower.contains("upc")
-                            || lower.equals("codigo") || lower.equals("cod")) {
+                            || lower.equals("codigo") || lower.equals("cod"))) {
                         tempBarcode = c;
-                    } else if (lower.contains("precio") && lower.contains("referencial")
-                            && !lower.contains("externo") && !lower.contains("promo")) {
+                    } else if (tempPrice == -1 && (lower.contains("precio") && lower.contains("referencial")
+                            && !lower.contains("externo") && !lower.contains("promo"))) {
                         tempPrice = c;
-                    } else if (lower.contains("dcto") && lower.contains("factura")) {
+                    } else if (tempDcto == -1 && (lower.contains("dcto") && lower.contains("factura"))) {
                         tempDcto = c;
-                    } else if (lower.contains("descripcion") || lower.contains("producto")
-                            || lower.contains("nombre") || lower.contains("articulo")) {
-                        tempDesc = c;
-                    } else if (lower.contains("existencia") || lower.contains("stock")
+                    } else if (tempStock == -1 && (lower.contains("existencia") || lower.contains("stock")
                             || lower.contains("exist") || lower.contains("cantidad")
-                            || lower.contains("disp")) {
+                            || lower.contains("disp"))) {
+                        // Stock detection BEFORE description to avoid "Existencia Producto" being mis-classified
                         tempStock = c;
+                    } else if (tempDesc == -1 && (lower.contains("descripcion")
+                            || (lower.contains("producto") && !lower.contains("cod"))
+                            || lower.contains("nombre") || lower.contains("articulo"))) {
+                        tempDesc = c;
                     } else if (tempPrice == -1 && (lower.contains("precio") || lower.contains("costo"))) {
                         // Fallback price detection
                         tempPrice = c;
@@ -101,9 +103,22 @@ public class NenaParser implements SupplierParser {
                 colPrice = inferPriceColumn(sheet, headerRow, colBarcode, colDesc);
             }
 
+            // Log detected header columns
             System.out.println("[NenaParser] Header at row " + headerRow
                     + ", barcode=" + colBarcode + ", price=" + colPrice
                     + ", desc=" + colDesc + ", stock=" + colStock + ", dcto=" + colDcto);
+
+            // Log the actual header names for debugging
+            Row hdrRow = sheet.getRow(headerRow);
+            if (hdrRow != null) {
+                StringBuilder hdrNames = new StringBuilder("[NenaParser] Header names: ");
+                for (int c = 0; c < hdrRow.getLastCellNum(); c++) {
+                    hdrNames.append(c).append("=").append(getCellString(hdrRow.getCell(c)).trim()).append(" | ");
+                }
+                System.out.println(hdrNames);
+            }
+
+            int diagCount = 0;
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
@@ -117,7 +132,22 @@ public class NenaParser implements SupplierParser {
                             : 0;
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
-                    int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
+
+                    // Read stock directly from Cell (avoid string conversion issues)
+                    int stock = 1; // default when column not found
+                    if (colStock >= 0) {
+                        stock = parseStockCell(row.getCell(colStock));
+                    }
+
+                    // Diagnostic: log first 3 products' stock
+                    if (diagCount < 3 && colStock >= 0 && !barcode.isEmpty() && basePrice > 0) {
+                        Cell stockCell = row.getCell(colStock);
+                        System.out.println("[NenaParser] DIAG row " + r + ": barcode=" + barcode
+                                + ", stockCellType=" + (stockCell != null ? stockCell.getCellType() : "NULL")
+                                + ", stockCellRaw=" + getCellString(stockCell)
+                                + ", stockParsed=" + stock);
+                        diagCount++;
+                    }
 
                     // Parse discount from DCTO. EN FACTURA column
                     double offerPct = 0;
@@ -183,6 +213,36 @@ public class NenaParser implements SupplierParser {
             }
         }
         return -1;
+    }
+
+    /**
+     * Read stock value directly from an Excel Cell, avoiding string conversion
+     * issues.
+     * Handles NUMERIC, STRING, FORMULA, and BLANK cell types.
+     */
+    private int parseStockCell(Cell cell) {
+        if (cell == null)
+            return 0;
+        try {
+            return switch (cell.getCellType()) {
+                case NUMERIC -> (int) cell.getNumericCellValue();
+                case STRING -> DataSanitizer.parseStock(cell.getStringCellValue());
+                case FORMULA -> {
+                    try {
+                        yield (int) cell.getNumericCellValue();
+                    } catch (Exception e) {
+                        try {
+                            yield DataSanitizer.parseStock(cell.getStringCellValue());
+                        } catch (Exception e2) {
+                            yield 0;
+                        }
+                    }
+                }
+                default -> 0;
+            };
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private String getCellString(Cell cell) {

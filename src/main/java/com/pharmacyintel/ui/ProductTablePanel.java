@@ -34,6 +34,7 @@ public class ProductTablePanel extends JPanel {
     private static final String FILTER_MEJOR_OFERTA = "Mejor Oferta DroActiva";
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
     private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
+    private static final String FILTER_SIN_INVENTARIO = "Productos sin Inventario";
 
     // DroActiva column indices for filtering
     private static final int DROACTIVA_IDX = 0; // Supplier.DROACTIVA ordinal
@@ -76,6 +77,7 @@ public class ProductTablePanel extends JPanel {
         strategyFilter.addItem(FILTER_MEJOR_OFERTA);
         strategyFilter.addItem(FILTER_PEOR_NETO);
         strategyFilter.addItem(FILTER_PEOR_OFERTA);
+        strategyFilter.addItem(FILTER_SIN_INVENTARIO);
         strategyFilter.putClientProperty("JComponent.roundRect", true);
         toolbar.add(strategyFilter);
 
@@ -418,6 +420,11 @@ public class ProductTablePanel extends JPanel {
                         }
                         if (!hasHigher)
                             return false;
+                    } else if (FILTER_SIN_INVENTARIO.equals(strategy)) {
+                        // Show only products where DroActiva has NO inventory (null or 0)
+                        Object invDroObj = entry.getValue(COL_INVENTARIO_START + DROACTIVA_IDX);
+                        if (invDroObj != null && ((Number) invDroObj).intValue() > 0)
+                            return false; // DroActiva HAS stock — hide this row
                     }
                 }
                 return true;
