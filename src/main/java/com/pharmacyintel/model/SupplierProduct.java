@@ -3,6 +3,8 @@ package com.pharmacyintel.model;
 public class SupplierProduct {
     private String barcode;
     private String description;
+    private String internalCode;
+    private String brand;
     private double basePrice;
     private double offerPct;
     private double netPrice;
@@ -114,6 +116,22 @@ public class SupplierProduct {
 
     public void setSupplier(Supplier supplier) {
         this.supplier = supplier;
+    }
+
+    public String getInternalCode() {
+        return internalCode;
+    }
+
+    public void setInternalCode(String internalCode) {
+        this.internalCode = internalCode;
+    }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public void setBrand(String brand) {
+        this.brand = brand;
     }
 
     public double getIva() {

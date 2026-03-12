@@ -36,6 +36,8 @@ public class DroactivaParser implements SupplierParser {
             int colStock = findCol(headers, "EXISTENCIA");
             int colIva = findCol(headers, "IVA");
             int colOffer = findCol(headers, "DA(%)");
+            int colCodigo = findCol(headers, "CODIGO");
+            int colMarca = findCol(headers, "MARCA");
 
             String line;
             while ((line = br.readLine()) != null) {
@@ -57,6 +59,8 @@ public class DroactivaParser implements SupplierParser {
                     SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock,
                             Supplier.DROACTIVA);
                     sp.setIva(iva);
+                    sp.setInternalCode(safeGet(cols, colCodigo).trim());
+                    sp.setBrand(safeGet(cols, colMarca).trim());
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

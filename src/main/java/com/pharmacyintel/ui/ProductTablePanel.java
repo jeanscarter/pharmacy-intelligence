@@ -20,14 +20,14 @@ public class ProductTablePanel extends JPanel {
     private static final int SUPPLIER_COUNT = SUPPLIERS.length;
 
     // Column group start indices
-    private static final int COL_PRECIO_VENTA_START = 3;
-    private static final int COL_OFERTA_START = 3 + SUPPLIER_COUNT;
-    private static final int COL_PRECIO_CON_OF_START = 3 + SUPPLIER_COUNT * 2;
-    private static final int COL_POSICION_START = 3 + SUPPLIER_COUNT * 3;
-    private static final int COL_ANALISIS_START = 3 + SUPPLIER_COUNT * 4;
+    private static final int COL_PRECIO_VENTA_START = 4;
+    private static final int COL_OFERTA_START = 4 + SUPPLIER_COUNT;
+    private static final int COL_PRECIO_CON_OF_START = 4 + SUPPLIER_COUNT * 2;
+    private static final int COL_POSICION_START = 4 + SUPPLIER_COUNT * 3;
+    private static final int COL_ANALISIS_START = 4 + SUPPLIER_COUNT * 4;
     private static final int COL_INVENTARIO_START = COL_ANALISIS_START + 3;
     private static final int COL_LOSER = COL_INVENTARIO_START + SUPPLIER_COUNT; // Hidden column for loser supplier
-    private static final int TOTAL_COLS = 3 + SUPPLIER_COUNT * 4 + 3 + SUPPLIER_COUNT + 1; // +1 for hidden loser
+    private static final int TOTAL_COLS = 4 + SUPPLIER_COUNT * 4 + 3 + SUPPLIER_COUNT + 1; // +1 for hidden loser
 
     private static final String FILTER_ALL = "Todos";
     private static final String FILTER_MEJOR_PRECIO = "Mejor Precio DroActiva";
@@ -98,6 +98,7 @@ public class ProductTablePanel extends JPanel {
         String[] columnNames = new String[TOTAL_COLS];
         int col = 0;
         columnNames[col++] = "Código";
+        columnNames[col++] = "Cód. Int";
         columnNames[col++] = "Descripción";
         columnNames[col++] = "#Prov";
         for (Supplier s : SUPPLIERS) {
@@ -127,6 +128,7 @@ public class ProductTablePanel extends JPanel {
             col = 0;
 
             data[i][col++] = mp.getBarcode();
+            data[i][col++] = mp.getInternalCode() != null ? mp.getInternalCode() : "";
             data[i][col++] = mp.getDescription() != null ? mp.getDescription() : "";
             data[i][col++] = mp.getSupplierCount();
 
@@ -165,9 +167,9 @@ public class ProductTablePanel extends JPanel {
 
             @Override
             public Class<?> getColumnClass(int c) {
-                if (c <= 1)
+                if (c <= 2)
                     return String.class;
-                if (c == 2)
+                if (c == 3)
                     return Integer.class;
                 if (c >= COL_POSICION_START && c < COL_ANALISIS_START)
                     return Integer.class;
@@ -237,9 +239,10 @@ public class ProductTablePanel extends JPanel {
 
         // Set column widths
         TableColumnModel cm = table.getColumnModel();
-        cm.getColumn(0).setPreferredWidth(120);
-        cm.getColumn(1).setPreferredWidth(260);
-        cm.getColumn(2).setPreferredWidth(45);
+        cm.getColumn(0).setPreferredWidth(100);
+        cm.getColumn(1).setPreferredWidth(75);
+        cm.getColumn(2).setPreferredWidth(260);
+        cm.getColumn(3).setPreferredWidth(45);
         for (int i = COL_PRECIO_VENTA_START; i < COL_PRECIO_VENTA_START + SUPPLIER_COUNT; i++)
             cm.getColumn(i).setPreferredWidth(82);
         for (int i = COL_OFERTA_START; i < COL_OFERTA_START + SUPPLIER_COUNT; i++)
@@ -472,7 +475,7 @@ public class ProductTablePanel extends JPanel {
 
                 // OFERTA section: show as percentage
                 if (column >= COL_OFERTA_START && column < COL_PRECIO_CON_OF_START) {
-                    setText(String.format("%.1f%%", d));
+                    setText(String.format("%.0f%%", d));
                     setForeground(new Color(255, 200, 100));
                 }
                 // PRECIO CON OF section: highlight winner (green) and loser (red)

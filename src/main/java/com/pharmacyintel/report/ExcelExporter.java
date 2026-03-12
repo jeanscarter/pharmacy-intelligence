@@ -29,6 +29,7 @@ public class ExcelExporter {
     private static final String FILTER_MEJOR_OFERTA = "Mejor Oferta DroActiva";
     private static final String FILTER_PEOR_NETO = "Peor Neto DroActiva";
     private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
+    private static final String FILTER_SIN_INVENTARIO = "Productos sin Inventario";
 
     public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir, String activeFilter,
             boolean stockOnly)
@@ -44,6 +45,7 @@ public class ExcelExporter {
         CellStyle loserStyle = createLoserStyle(wb);
         CellStyle priceStyle = createPriceStyle(wb);
         CellStyle pctStyle = createPercentStyle(wb);
+        CellStyle intPctStyle = createIntPercentStyle(wb);
         CellStyle textStyle = createTextStyle(wb);
         CellStyle stockCellStyle = createStockCellStyle(wb);
         CellStyle posWinStyle = createPositionWinStyle(wb);
@@ -54,6 +56,8 @@ public class ExcelExporter {
                 || FILTER_MEJOR_OFERTA.equals(activeFilter)
                 || FILTER_PEOR_NETO.equals(activeFilter)
                 || FILTER_PEOR_OFERTA.equals(activeFilter);
+
+        boolean isSinInventario = FILTER_SIN_INVENTARIO.equals(activeFilter);
 
         // --- Title row ---
         Row titleRow = sheet.createRow(0);
@@ -77,17 +81,17 @@ public class ExcelExporter {
         infoRow.createCell(6).setCellValue("Filtro: " + activeFilter);
 
         // --- Filter + Sort products ---
-        List<MasterProduct> products = filterAndSort(catalog, activeFilter);
+        List<MasterProduct> products = filterAndSort(catalog, activeFilter, isSinInventario);
 
         // --- Write data based on mode ---
         int colCount;
         if (isStrategic) {
             colCount = writeStrategicReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
-                    winnerStyle, loserStyle, priceStyle, pctStyle, textStyle, stockCellStyle,
+                    winnerStyle, loserStyle, priceStyle, pctStyle, intPctStyle, textStyle, stockCellStyle,
                     posWinStyle, posLoseStyle, posNeutralStyle, activeFilter, stockOnly);
         } else {
             colCount = writeFullReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
-                    winnerStyle, loserStyle, priceStyle, pctStyle, textStyle, stockCellStyle,
+                    winnerStyle, loserStyle, priceStyle, pctStyle, intPctStyle, textStyle, stockCellStyle,
                     posWinStyle, posLoseStyle, posNeutralStyle, stockOnly);
         }
 
@@ -115,7 +119,8 @@ public class ExcelExporter {
     // FILTERING & SORTING
     // ====================================================================
 
-    private List<MasterProduct> filterAndSort(Map<String, MasterProduct> catalog, String activeFilter) {
+    private List<MasterProduct> filterAndSort(Map<String, MasterProduct> catalog, String activeFilter,
+            boolean sinInventario) {
         List<MasterProduct> all = new ArrayList<>(catalog.values());
 
         List<MasterProduct> filtered;
@@ -195,12 +200,27 @@ public class ExcelExporter {
                         (MasterProduct mp) -> mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             default -> {
-                // "Todos" — no filter, worst positioning first
-                filtered = all;
-                comparator = Comparator
-                        .comparingDouble((MasterProduct mp) -> -mp.getDiffPctForSupplier(BASE_SUPPLIER))
-                        .thenComparingInt(mp -> -mp.getPositionForSupplier(BASE_SUPPLIER))
-                        .thenComparing(mp -> mp.getDescription() != null ? mp.getDescription() : "");
+                // "Todos" or "Sin Inventario"
+                if (sinInventario) {
+                    // Only products where DroActiva has NO inventory
+                    filtered = all.stream()
+                            .filter(mp -> mp.getStockForSupplier(BASE_SUPPLIER) <= 0)
+                            .toList();
+                    // Sort by Cobeca's inventory for "Sin Inventario"
+                    comparator = Comparator
+                            .comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(Supplier.COBECA))
+                            .thenComparingDouble(mp -> -mp.getDiffPctForSupplier(BASE_SUPPLIER))
+                            .thenComparingInt(mp -> -mp.getPositionForSupplier(BASE_SUPPLIER))
+                            .thenComparing(mp -> mp.getDescription() != null ? mp.getDescription() : "");
+                } else {
+                    filtered = all;
+                    // Normal sort by DroActiva's inventory
+                    comparator = Comparator
+                            .comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
+                            .thenComparingDouble(mp -> -mp.getDiffPctForSupplier(BASE_SUPPLIER))
+                            .thenComparingInt(mp -> -mp.getPositionForSupplier(BASE_SUPPLIER))
+                            .thenComparing(mp -> mp.getDescription() != null ? mp.getDescription() : "");
+                }
             }
         }
 
@@ -214,15 +234,16 @@ public class ExcelExporter {
     private int writeFullReport(XSSFSheet sheet, List<MasterProduct> products,
             CellStyle headerStyle, CellStyle supplierHeaderStyle, CellStyle stockHeaderStyle,
             CellStyle winnerStyle, CellStyle loserStyle, CellStyle priceStyle,
-            CellStyle pctStyle, CellStyle textStyle, CellStyle stockCellStyle,
+            CellStyle pctStyle, CellStyle intPctStyle, CellStyle textStyle, CellStyle stockCellStyle,
             CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle, boolean stockOnly) {
 
-        int colCount = 2 + (SUPPLIER_COUNT * 4) + 7;
+        int colCount = 3 + (SUPPLIER_COUNT * 4) + 6;
 
         // Header
         Row header = sheet.createRow(3);
         int col = 0;
         setCellStyled(header, col++, "Código de Barras", headerStyle);
+        setCellStyled(header, col++, "Código Interno", headerStyle);
         setCellStyled(header, col++, "Descripción", headerStyle);
         for (Supplier s : SUPPLIERS) {
             setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
@@ -232,10 +253,9 @@ public class ExcelExporter {
         }
         setCellStyled(header, col++, "Posición " + BASE_SUPPLIER.getDisplayName(), headerStyle);
         setCellStyled(header, col++, "# Prov", headerStyle);
-        setCellStyled(header, col++, "Droguería Ganadora", headerStyle);
+        setCellStyled(header, col++, "MARCA", headerStyle);
         setCellStyled(header, col++, "DIF %", headerStyle);
         setCellStyled(header, col++, "DIF USD", headerStyle);
-        setCellStyled(header, col++, "P. Venta Simulado", headerStyle);
         setCellStyled(header, col++, "Margen USD", headerStyle);
 
         // Data
@@ -245,10 +265,11 @@ public class ExcelExporter {
             col = 0;
 
             setCellText(row, col++, mp.getBarcode(), textStyle);
+            setCellText(row, col++, mp.getInternalCode() != null ? mp.getInternalCode() : "", textStyle);
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
 
             for (Supplier s : SUPPLIERS) {
-                col = writeSupplierBlock(row, col, mp, s, priceStyle, pctStyle, stockCellStyle, winnerStyle,
+                col = writeSupplierBlock(row, col, mp, s, priceStyle, intPctStyle, stockCellStyle, winnerStyle,
                         loserStyle, stockOnly);
             }
 
@@ -269,9 +290,9 @@ public class ExcelExporter {
 
             row.createCell(col++).setCellValue(supplierCount);
 
-            Cell winnerCell = row.createCell(col++);
-            if (mp.getWinnerSupplier(stockOnly) != null)
-                winnerCell.setCellValue(mp.getWinnerSupplier(stockOnly).getDisplayName());
+            Cell brandCell = row.createCell(col++);
+            if (mp.getBrand() != null)
+                brandCell.setCellValue(mp.getBrand());
 
             Cell diffPctCell = row.createCell(col++);
             if (mp.getDiffPct(stockOnly) > 0) {
@@ -283,12 +304,6 @@ public class ExcelExporter {
             if (mp.getDiffAmount(stockOnly) > 0) {
                 diffAmtCell.setCellValue(mp.getDiffAmount(stockOnly));
                 diffAmtCell.setCellStyle(priceStyle);
-            }
-
-            Cell salePriceCell = row.createCell(col++);
-            if (mp.getSimulatedSalePrice(stockOnly) > 0) {
-                salePriceCell.setCellValue(mp.getSimulatedSalePrice(stockOnly));
-                salePriceCell.setCellStyle(priceStyle);
             }
 
             Cell marginCell = row.createCell(col++);
@@ -308,7 +323,7 @@ public class ExcelExporter {
     private int writeStrategicReport(XSSFSheet sheet, List<MasterProduct> products,
             CellStyle headerStyle, CellStyle supplierHeaderStyle, CellStyle stockHeaderStyle,
             CellStyle winnerStyle, CellStyle loserStyle, CellStyle priceStyle,
-            CellStyle pctStyle, CellStyle textStyle, CellStyle stockCellStyle,
+            CellStyle pctStyle, CellStyle intPctStyle, CellStyle textStyle, CellStyle stockCellStyle,
             CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle,
             String activeFilter, boolean stockOnly) {
 
@@ -321,7 +336,7 @@ public class ExcelExporter {
         boolean skipDiffAndPos = isOferta;
 
         // Compute colCount
-        int colCount = 2 + SUPPLIER_COUNT + SUPPLIER_COUNT; // barcode+desc + metric + inv
+        int colCount = 3 + SUPPLIER_COUNT + SUPPLIER_COUNT; // barcode+code+desc + metric + inv
         if (!skipDiffAndPos) {
             colCount += 2 + SUPPLIER_COUNT; // diff$ + %diff + positions
         }
@@ -329,6 +344,7 @@ public class ExcelExporter {
         Row header = sheet.createRow(3);
         int col = 0;
         setCellStyled(header, col++, "Código de Barras", headerStyle);
+        setCellStyled(header, col++, "Código Interno", headerStyle);
         setCellStyled(header, col++, "Descripción", headerStyle);
 
         // Metric columns per supplier
@@ -369,6 +385,7 @@ public class ExcelExporter {
             col = 0;
 
             setCellText(row, col++, mp.getBarcode(), textStyle);
+            setCellText(row, col++, mp.getInternalCode() != null ? mp.getInternalCode() : "", textStyle);
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
 
             // Metric values per supplier
@@ -392,8 +409,8 @@ public class ExcelExporter {
                 Cell cell = row.createCell(col++);
                 if (val > 0) {
                     if (isOferta) {
-                        cell.setCellValue(val / 100.0);
-                        cell.setCellStyle(pctStyle);
+                        cell.setCellValue(Math.round(val));
+                        cell.setCellStyle(intPctStyle);
                     } else {
                         cell.setCellValue(val);
                         cell.setCellStyle(priceStyle);
@@ -510,7 +527,7 @@ public class ExcelExporter {
 
         Cell ofCell = row.createCell(col++);
         if (offerPct > 0) {
-            ofCell.setCellValue(offerPct / 100.0);
+            ofCell.setCellValue(Math.round(offerPct));
             ofCell.setCellStyle(pctStyle);
         }
 
@@ -622,7 +639,13 @@ public class ExcelExporter {
 
     private CellStyle createPercentStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
-        style.setDataFormat(wb.createDataFormat().getFormat("0.00%"));
+        style.setDataFormat(wb.createDataFormat().getFormat("0%"));
+        return style;
+    }
+
+    private CellStyle createIntPercentStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        style.setDataFormat(wb.createDataFormat().getFormat("0\"%\""));
         return style;
     }
 

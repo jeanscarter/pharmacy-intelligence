@@ -97,20 +97,25 @@ public class MasterProduct {
         // Sort ascending by price
         validPrices.sort(Comparator.comparingDouble(Map.Entry::getValue));
 
-        // --- Dense ranking: suppliers with the same price share the same position ---
-        int rank = 1;
-        supplierPositions.put(validPrices.get(0).getKey(), rank);
-        for (int i = 1; i < validPrices.size(); i++) {
-            double prevPrice = validPrices.get(i - 1).getValue();
-            double currPrice = validPrices.get(i).getValue();
-            // Only bump rank if price is strictly different (tolerance 0.001)
-            if (Math.abs(currPrice - prevPrice) > 0.001) {
-                rank++;
+        // --- Ordinal ranking: strictly sequential 1, 2, 3... with stock as tie-breaker ---
+        validPrices.sort((e1, e2) -> {
+            int c = Double.compare(e1.getValue(), e2.getValue());
+            if (c == 0) {
+                // Secondary sort: higher stock wins
+                SupplierProduct sp1 = supplierPrices.get(e1.getKey());
+                SupplierProduct sp2 = supplierPrices.get(e2.getKey());
+                int s1 = sp1 != null ? sp1.getStock() : 0;
+                int s2 = sp2 != null ? sp2.getStock() : 0;
+                return Integer.compare(s2, s1);
             }
-            supplierPositions.put(validPrices.get(i).getKey(), rank);
+            return c;
+        });
+
+        for (int i = 0; i < validPrices.size(); i++) {
+            supplierPositions.put(validPrices.get(i).getKey(), i + 1);
         }
 
-        // --- Dense ranking for STOCK ONLY ---
+        // --- Ordinal ranking for STOCK ONLY ---
         List<Map.Entry<Supplier, Double>> stockPrices = new ArrayList<>();
         for (var vp : validPrices) {
             SupplierProduct sp = supplierPrices.get(vp.getKey());
@@ -118,16 +123,22 @@ public class MasterProduct {
                 stockPrices.add(vp);
             }
         }
+        
+        stockPrices.sort((e1, e2) -> {
+            int c = Double.compare(e1.getValue(), e2.getValue());
+            if (c == 0) {
+                SupplierProduct sp1 = supplierPrices.get(e1.getKey());
+                SupplierProduct sp2 = supplierPrices.get(e2.getKey());
+                int s1 = sp1 != null ? sp1.getStock() : 0;
+                int s2 = sp2 != null ? sp2.getStock() : 0;
+                return Integer.compare(s2, s1);
+            }
+            return c;
+        });
+
         if (!stockPrices.isEmpty()) {
-            int rankStock = 1;
-            supplierPositionsStockOnly.put(stockPrices.get(0).getKey(), rankStock);
-            for (int i = 1; i < stockPrices.size(); i++) {
-                double prevPrice = stockPrices.get(i - 1).getValue();
-                double currPrice = stockPrices.get(i).getValue();
-                if (Math.abs(currPrice - prevPrice) > 0.001) {
-                    rankStock++;
-                }
-                supplierPositionsStockOnly.put(stockPrices.get(i).getKey(), rankStock);
+            for (int i = 0; i < stockPrices.size(); i++) {
+                supplierPositionsStockOnly.put(stockPrices.get(i).getKey(), i + 1);
             }
         }
 
@@ -141,10 +152,21 @@ public class MasterProduct {
                 if (loserSupplier == winnerSupplier)
                     loserSupplier = null;
 
-                double secondBest = validPrices.get(1).getValue();
-                diffAmount = secondBest - bestPrice;
-                if (bestPrice > 0) {
-                    diffPct = (diffAmount / bestPrice) * 100.0;
+                // DIF USD = Precio_DroActiva - Mejor_Precio_Competencia
+                double netDro = getNetPriceForSupplier(Supplier.DROACTIVA);
+                double bestOther = Double.MAX_VALUE;
+                for (var vp : validPrices) {
+                    if (vp.getKey() != Supplier.DROACTIVA && vp.getValue() > 0) {
+                        bestOther = Math.min(bestOther, vp.getValue());
+                    }
+                }
+                
+                if (netDro > 0 && bestOther < Double.MAX_VALUE && bestOther > 0) {
+                    diffAmount = netDro - bestOther;
+                    diffPct = (diffAmount / netDro) * 100.0;
+                } else {
+                    diffAmount = 0;
+                    diffPct = 0;
                 }
             }
         }
@@ -159,10 +181,25 @@ public class MasterProduct {
                 if (loserSupplierStockOnly == winnerSupplierStockOnly)
                     loserSupplierStockOnly = null;
 
-                double secondBestStock = stockPrices.get(1).getValue();
-                diffAmountStockOnly = secondBestStock - bestPriceStockOnly;
-                if (bestPriceStockOnly > 0) {
-                    diffPctStockOnly = (diffAmountStockOnly / bestPriceStockOnly) * 100.0;
+                double netDroStock = 0;
+                SupplierProduct spDro = supplierPrices.get(Supplier.DROACTIVA);
+                if (spDro != null && spDro.hasStock()) {
+                    netDroStock = spDro.getNetPrice();
+                }
+
+                double bestOtherStock = Double.MAX_VALUE;
+                for (var vp : stockPrices) {
+                    if (vp.getKey() != Supplier.DROACTIVA && vp.getValue() > 0) {
+                        bestOtherStock = Math.min(bestOtherStock, vp.getValue());
+                    }
+                }
+
+                if (netDroStock > 0 && bestOtherStock < Double.MAX_VALUE && bestOtherStock > 0) {
+                    diffAmountStockOnly = netDroStock - bestOtherStock;
+                    diffPctStockOnly = (diffAmountStockOnly / netDroStock) * 100.0;
+                } else {
+                    diffAmountStockOnly = 0;
+                    diffPctStockOnly = 0;
                 }
             }
         } else if (!validPrices.isEmpty()) {
@@ -272,6 +309,22 @@ public class MasterProduct {
 
     public String getDescription() {
         return description;
+    }
+
+    /**
+     * Returns the internal product code from DroActiva (if available).
+     */
+    public String getInternalCode() {
+        SupplierProduct sp = supplierPrices.get(Supplier.DROACTIVA);
+        return sp != null ? sp.getInternalCode() : null;
+    }
+
+    /**
+     * Returns the brand from DroActiva (if available).
+     */
+    public String getBrand() {
+        SupplierProduct sp = supplierPrices.get(Supplier.DROACTIVA);
+        return sp != null ? sp.getBrand() : null;
     }
 
     /**
