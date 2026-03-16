@@ -226,6 +226,9 @@ public class ProductTablePanel extends JPanel {
         table.setShowGrid(true);
         table.setAutoCreateRowSorter(false);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        
+        // Allow cell selection for copying (Ctrl+C)
+        table.setCellSelectionEnabled(true);
 
         // Hide loser column
         table.getColumnModel().getColumn(COL_LOSER).setMinWidth(0);

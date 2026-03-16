@@ -27,7 +27,7 @@ public class CobecaParser implements SupplierParser {
             Sheet sheet = wb.getSheetAt(0);
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1, colDiscount = -1;
+            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1, colDiscount = -1, colProveedor = -1;
 
             for (int r = 0; r <= Math.min(10, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
@@ -52,6 +52,8 @@ public class CobecaParser implements SupplierParser {
                     else if (colDesc == -1
                             && (val.contains("descripcion") || val.equals("producto") || val.equals("nombre")))
                         colDesc = c;
+                    else if (val.equals("proveedor"))
+                        colProveedor = c;
                     // Fallback: if Precio_Referencial not found, use Precio_Referencial_Final
                     if (colPrice == -1) {
                         if (val.contains("precio_referencial_final") || val.contains("precio referencial final"))
@@ -89,6 +91,9 @@ public class CobecaParser implements SupplierParser {
 
                     SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock,
                             Supplier.COBECA);
+                    if (colProveedor >= 0) {
+                        sp.setBrand(getCellString(row.getCell(colProveedor)).trim());
+                    }
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

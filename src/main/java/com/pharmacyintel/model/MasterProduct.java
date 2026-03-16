@@ -321,10 +321,16 @@ public class MasterProduct {
 
     /**
      * Returns the brand from DroActiva (if available).
+     * Discards invalid brands. Falls back to Cobeca's supplier column if missing.
      */
     public String getBrand() {
-        SupplierProduct sp = supplierPrices.get(Supplier.DROACTIVA);
-        return sp != null ? sp.getBrand() : null;
+        SupplierProduct spDro = supplierPrices.get(Supplier.DROACTIVA);
+        String brand = spDro != null ? spDro.getBrand() : null;
+        if (brand == null || brand.trim().isEmpty()) {
+            SupplierProduct spCobeca = supplierPrices.get(Supplier.COBECA);
+            brand = spCobeca != null ? spCobeca.getBrand() : null;
+        }
+        return brand;
     }
 
     /**
