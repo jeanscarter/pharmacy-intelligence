@@ -21,7 +21,6 @@ import java.util.Map;
 public class ExcelExporter {
 
     private static final Supplier[] SUPPLIERS = Supplier.values();
-    private static final int SUPPLIER_COUNT = SUPPLIERS.length;
     private static final Supplier BASE_SUPPLIER = Supplier.DROACTIVA;
 
     // Filter constants (must match ProductTablePanel)
@@ -239,8 +238,6 @@ public class ExcelExporter {
             CellStyle pctStyle, CellStyle intPctStyle, CellStyle textStyle, CellStyle stockCellStyle,
             CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle, boolean stockOnly, boolean isSinInventario) {
 
-        int colCount = 3 + (SUPPLIER_COUNT * 4) + 6;
-
         // Header
         Row header = sheet.createRow(3);
         int col = 0;
@@ -252,19 +249,27 @@ public class ExcelExporter {
         for (Supplier s : SUPPLIERS) {
             if (isSinInventario && s == Supplier.DROACTIVA)
                 continue;
-            setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
-            setCellStyled(header, col++, "OF% " + s.getDisplayName(), supplierHeaderStyle);
-            setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
+            if (!isSinInventario) {
+                setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
+                setCellStyled(header, col++, "OF% " + s.getDisplayName(), supplierHeaderStyle);
+                setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
+            }
             setCellStyled(header, col++, "Stock " + s.getDisplayName(), stockHeaderStyle);
         }
         if (!isSinInventario) {
             setCellStyled(header, col++, "Posición " + BASE_SUPPLIER.getDisplayName(), headerStyle);
+            setCellStyled(header, col++, "# Prov", headerStyle);
         }
-        setCellStyled(header, col++, "# Prov", headerStyle);
-        setCellStyled(header, col++, "MARCA", headerStyle);
-        setCellStyled(header, col++, "DIF %", headerStyle);
-        setCellStyled(header, col++, "DIF USD", headerStyle);
-        setCellStyled(header, col++, "Margen USD", headerStyle);
+        // Sin Inventario: "Proveedor" instead of "MARCA", and no DIF/Margen columns
+        if (isSinInventario) {
+            setCellStyled(header, col++, "Proveedor", headerStyle);
+        } else {
+            setCellStyled(header, col++, "MARCA", headerStyle);
+            setCellStyled(header, col++, "DIF %", headerStyle);
+            setCellStyled(header, col++, "DIF USD", headerStyle);
+            setCellStyled(header, col++, "Margen USD", headerStyle);
+        }
+        int colCount = col;
 
         // Data
         int rowIdx = 4;
@@ -281,8 +286,18 @@ public class ExcelExporter {
             for (Supplier s : SUPPLIERS) {
                 if (isSinInventario && s == Supplier.DROACTIVA)
                     continue;
-                col = writeSupplierBlock(row, col, mp, s, priceStyle, intPctStyle, stockCellStyle, winnerStyle,
-                        loserStyle, stockOnly);
+                // Sin Inventario: no winner/loser colors on cells
+                if (isSinInventario) {
+                    int stock = mp.getStockForSupplier(s);
+                    Cell stockCell = row.createCell(col++);
+                    if (stock > 0) {
+                        stockCell.setCellValue(stock);
+                        stockCell.setCellStyle(stockCellStyle);
+                    }
+                } else {
+                    col = writeSupplierBlock(row, col, mp, s, priceStyle, intPctStyle, stockCellStyle, winnerStyle,
+                            loserStyle, stockOnly);
+                }
             }
 
             // Analytics
@@ -300,30 +315,32 @@ public class ExcelExporter {
                     else
                         posCell.setCellStyle(posNeutralStyle);
                 }
+                row.createCell(col++).setCellValue(supplierCount);
             }
-
-            row.createCell(col++).setCellValue(supplierCount);
 
             Cell brandCell = row.createCell(col++);
             if (mp.getBrand() != null)
                 brandCell.setCellValue(mp.getBrand());
 
-            Cell diffPctCell = row.createCell(col++);
-            if (mp.getDiffPct(stockOnly) > 0) {
-                diffPctCell.setCellValue(mp.getDiffPct(stockOnly) / 100.0);
-                diffPctCell.setCellStyle(pctStyle);
-            }
+            // Sin Inventario: no DIF / Margen columns
+            if (!isSinInventario) {
+                Cell diffPctCell = row.createCell(col++);
+                if (mp.getDiffPct(stockOnly) > 0) {
+                    diffPctCell.setCellValue(mp.getDiffPct(stockOnly) / 100.0);
+                    diffPctCell.setCellStyle(pctStyle);
+                }
 
-            Cell diffAmtCell = row.createCell(col++);
-            if (mp.getDiffAmount(stockOnly) > 0) {
-                diffAmtCell.setCellValue(mp.getDiffAmount(stockOnly));
-                diffAmtCell.setCellStyle(priceStyle);
-            }
+                Cell diffAmtCell = row.createCell(col++);
+                if (mp.getDiffAmount(stockOnly) > 0) {
+                    diffAmtCell.setCellValue(mp.getDiffAmount(stockOnly));
+                    diffAmtCell.setCellStyle(priceStyle);
+                }
 
-            Cell marginCell = row.createCell(col++);
-            if (mp.getSimulatedMargin(stockOnly) > 0) {
-                marginCell.setCellValue(mp.getSimulatedMargin(stockOnly));
-                marginCell.setCellStyle(priceStyle);
+                Cell marginCell = row.createCell(col++);
+                if (mp.getSimulatedMargin(stockOnly) > 0) {
+                    marginCell.setCellValue(mp.getSimulatedMargin(stockOnly));
+                    marginCell.setCellStyle(priceStyle);
+                }
             }
         }
 
@@ -349,12 +366,6 @@ public class ExcelExporter {
         // Offer-based exports: only OF% + Inventory (no diff, no positions)
         boolean skipDiffAndPos = isOferta;
 
-        // Compute colCount
-        int colCount = 4 + SUPPLIER_COUNT + SUPPLIER_COUNT; // barcode+code+desc+marca + metric + inv
-        if (!skipDiffAndPos) {
-            colCount += 2 + SUPPLIER_COUNT; // diff$ + %diff + positions
-        }
-
         Row header = sheet.createRow(3);
         int col = 0;
         setCellStyled(header, col++, "Código de Barras", headerStyle);
@@ -365,7 +376,7 @@ public class ExcelExporter {
         // Metric columns per supplier
         String metricPrefix;
         if (isPrecio) {
-            metricPrefix = "PV";
+            metricPrefix = "Neto";  // Changed: use Neto instead of PV
         } else if (isOferta) {
             metricPrefix = "OF%";
         } else {
@@ -373,6 +384,13 @@ public class ExcelExporter {
         }
         for (Supplier s : SUPPLIERS) {
             setCellStyled(header, col++, metricPrefix + " " + s.getDisplayName(), supplierHeaderStyle);
+        }
+
+        // For Mejor Oferta: add Neto columns after OF% columns
+        if (isMejorOferta) {
+            for (Supplier s : SUPPLIERS) {
+                setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
+            }
         }
 
         // Differentials (only for non-offer modes)
@@ -393,6 +411,8 @@ public class ExcelExporter {
             }
         }
 
+        int colCount = col;
+
         // --- Data rows ---
         int rowIdx = 4;
         for (MasterProduct mp : products) {
@@ -404,14 +424,41 @@ public class ExcelExporter {
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
             setCellText(row, col++, mp.getBrand() != null ? mp.getBrand() : "", textStyle);
 
+            // --- For offer modes: find best and worst OF% for coloring ---
+            Supplier bestOfferSupplier = null;
+            Supplier worstOfferSupplier = null;
+            if (isOferta) {
+                double bestOf = -1;
+                double worstOf = Double.MAX_VALUE;
+                for (Supplier s : SUPPLIERS) {
+                    double of = mp.getOfferPctForSupplier(s);
+                    if (stockOnly && mp.getStockForSupplier(s) <= 0) of = 0;
+                    if (of > 0) {
+                        if (of > bestOf) {
+                            bestOf = of;
+                            bestOfferSupplier = s;
+                        }
+                        if (of < worstOf) {
+                            worstOf = of;
+                            worstOfferSupplier = s;
+                        }
+                    }
+                }
+                // Don't mark worst if it's the same as best (only 1 supplier)
+                if (worstOfferSupplier == bestOfferSupplier) {
+                    worstOfferSupplier = null;
+                }
+            }
+
             // Metric values per supplier
             double droValue = 0;
-            double bestOtherValue = Double.MAX_VALUE;
+            // For Mejor Precio: collect all net prices to find 2nd best
+            List<double[]> allNetPrices = isPrecio ? new ArrayList<>() : null;
 
             for (Supplier s : SUPPLIERS) {
                 double val;
                 if (isPrecio) {
-                    val = mp.getBasePriceForSupplier(s);
+                    val = mp.getNetPriceForSupplier(s);  // Changed: use Neto instead of PV
                 } else if (isOferta) {
                     val = mp.getOfferPctForSupplier(s);
                 } else {
@@ -427,13 +474,18 @@ public class ExcelExporter {
                     if (isOferta) {
                         cell.setCellValue(Math.round(val));
                         cell.setCellStyle(intPctStyle);
+                        // Color best/worst offer
+                        if (s == bestOfferSupplier) {
+                            cell.setCellStyle(winnerStyle);
+                        } else if (s == worstOfferSupplier) {
+                            if (!isPeorOferta) {
+                                cell.setCellStyle(loserStyle);
+                            }
+                        }
                     } else {
                         cell.setCellValue(val);
                         cell.setCellStyle(priceStyle);
-                    }
-
-                    // Highlight winner/loser for the metric
-                    if (!isOferta) {
+                        // Highlight winner/loser for the metric
                         if (s == mp.getWinnerSupplier(stockOnly)) {
                             cell.setCellStyle(winnerStyle);
                         } else if (s == mp.getWorstPriceSupplier(stockOnly)) {
@@ -444,9 +496,25 @@ public class ExcelExporter {
 
                 if (s == BASE_SUPPLIER) {
                     droValue = val;
-                } else if (val > 0 && !isOferta) {
-                    if (val < bestOtherValue)
-                        bestOtherValue = val;
+                }
+                // Collect net prices for Mejor Precio differential
+                if (isPrecio && val > 0) {
+                    allNetPrices.add(new double[] { val });
+                }
+            }
+
+            // For Mejor Oferta: write Neto columns after OF%
+            if (isMejorOferta) {
+                for (Supplier s : SUPPLIERS) {
+                    double netVal = mp.getNetPriceForSupplier(s);
+                    if (stockOnly && mp.getStockForSupplier(s) <= 0) {
+                        netVal = 0;
+                    }
+                    Cell netCell = row.createCell(col++);
+                    if (netVal > 0) {
+                        netCell.setCellValue(netVal);
+                        netCell.setCellStyle(priceStyle);
+                    }
                 }
             }
 
@@ -455,9 +523,15 @@ public class ExcelExporter {
                 double diffAmt = 0;
                 double diffPctVal = 0;
                 if (isPrecio) {
-                    if (droValue > 0 && bestOtherValue < Double.MAX_VALUE && bestOtherValue > 0) {
-                        diffAmt = droValue - bestOtherValue;
-                        diffPctVal = (diffAmt / droValue);
+                    // Changed: differential = 2nd best net - DroActiva net
+                    if (droValue > 0 && allNetPrices != null && allNetPrices.size() >= 2) {
+                        // Sort all net prices ascending
+                        allNetPrices.sort(Comparator.comparingDouble(a -> a[0]));
+                        double secondBest = allNetPrices.get(1)[0]; // 2nd smallest
+                        diffAmt = secondBest - droValue;
+                        if (droValue > 0) {
+                            diffPctVal = (diffAmt / droValue);
+                        }
                     }
                 } else {
                     // Peor Neto
@@ -550,9 +624,10 @@ public class ExcelExporter {
         Cell netCell = row.createCell(col++);
         if (netPrice > 0) {
             netCell.setCellValue(netPrice);
-            if (s == mp.getWinnerSupplier())
+            // winnerStyle/loserStyle may be null (e.g. Sin Inventario)
+            if (winnerStyle != null && s == mp.getWinnerSupplier())
                 netCell.setCellStyle(winnerStyle);
-            else if (s == mp.getLoserSupplier())
+            else if (loserStyle != null && s == mp.getLoserSupplier())
                 netCell.setCellStyle(loserStyle);
             else
                 netCell.setCellStyle(priceStyle);
