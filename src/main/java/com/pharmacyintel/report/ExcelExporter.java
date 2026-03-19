@@ -48,6 +48,7 @@ public class ExcelExporter {
         CellStyle textStyle = createTextStyle(wb);
         CellStyle stockCellStyle = createStockCellStyle(wb);
         CellStyle posWinStyle = createPositionWinStyle(wb);
+        CellStyle winnerIntPctStyle = createWinnerIntPctStyle(wb);
         CellStyle posLoseStyle = createPositionLoseStyle(wb);
         CellStyle posNeutralStyle = createPositionNeutralStyle(wb);
 
@@ -86,7 +87,7 @@ public class ExcelExporter {
         int colCount;
         if (isStrategic) {
             colCount = writeStrategicReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
-                    winnerStyle, loserStyle, priceStyle, pctStyle, intPctStyle, textStyle, stockCellStyle,
+                    winnerStyle, loserStyle, priceStyle, pctStyle, intPctStyle, winnerIntPctStyle, textStyle, stockCellStyle,
                     posWinStyle, posLoseStyle, posNeutralStyle, activeFilter, stockOnly);
         } else {
             colCount = writeFullReport(sheet, products, headerStyle, supplierHeaderStyle, stockHeaderStyle,
@@ -354,7 +355,7 @@ public class ExcelExporter {
     private int writeStrategicReport(XSSFSheet sheet, List<MasterProduct> products,
             CellStyle headerStyle, CellStyle supplierHeaderStyle, CellStyle stockHeaderStyle,
             CellStyle winnerStyle, CellStyle loserStyle, CellStyle priceStyle,
-            CellStyle pctStyle, CellStyle intPctStyle, CellStyle textStyle, CellStyle stockCellStyle,
+            CellStyle pctStyle, CellStyle intPctStyle, CellStyle winnerIntPctStyle, CellStyle textStyle, CellStyle stockCellStyle,
             CellStyle posWinStyle, CellStyle posLoseStyle, CellStyle posNeutralStyle,
             String activeFilter, boolean stockOnly) {
 
@@ -476,11 +477,7 @@ public class ExcelExporter {
                         cell.setCellStyle(intPctStyle);
                         // Color best/worst offer
                         if (s == bestOfferSupplier) {
-                            cell.setCellStyle(winnerStyle);
-                        } else if (s == worstOfferSupplier) {
-                            if (!isPeorOferta) {
-                                cell.setCellStyle(loserStyle);
-                            }
+                            cell.setCellStyle(winnerIntPctStyle);
                         }
                     } else {
                         cell.setCellValue(val);
@@ -736,6 +733,18 @@ public class ExcelExporter {
 
     private CellStyle createIntPercentStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
+        style.setDataFormat(wb.createDataFormat().getFormat("0\"%\""));
+        return style;
+    }
+
+    private CellStyle createWinnerIntPctStyle(XSSFWorkbook wb) {
+        CellStyle style = wb.createCellStyle();
+        style.setFillForegroundColor(new XSSFColor(new byte[] { 39, (byte) 174, 96 }, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        style.setFont(font);
         style.setDataFormat(wb.createDataFormat().getFormat("0\"%\""));
         return style;
     }
