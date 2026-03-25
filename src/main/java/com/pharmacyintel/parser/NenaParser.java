@@ -14,10 +14,8 @@ import java.util.regex.Pattern;
 
 /**
  * Parser for Nena Excel files.
- * Extracts: Base = PRECIO (REFERENCIAL) in Bs, Offer = from DCTO. EN FACTURA
- * column.
- * Offer is extracted from text like "Dcto en factura de 20,00%".
- * NetPrice is computed: basePrice * (1 - offerPct / 100).
+ * Extracts: Base = PRECIO (REFERENCIAL) in Bs, Discounts = OFERTA, DCTO. CT.
+ * NetPrice uses cascading: basePrice × (1-OFERTA/100) × (1-DCTO_CT/100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
 public class NenaParser implements SupplierParser {
@@ -34,14 +32,16 @@ public class NenaParser implements SupplierParser {
             Sheet sheet = wb.getSheetAt(0);
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1, colDcto = -1;
+            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
+            int colOferta = -1, colDctoCt = -1;
 
             for (int r = 0; r <= Math.min(15, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null)
                     continue;
 
-                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1, tempDcto = -1;
+                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1;
+                int tempOferta = -1, tempDctoCt = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
                     String val = getCellString(row.getCell(c)).trim();
@@ -58,8 +58,12 @@ public class NenaParser implements SupplierParser {
                     } else if (tempPrice == -1 && (lower.contains("precio") && lower.contains("referencial")
                             && !lower.contains("externo") && !lower.contains("promo"))) {
                         tempPrice = c;
-                    } else if (tempDcto == -1 && (lower.contains("dcto") && lower.contains("factura"))) {
-                        tempDcto = c;
+                    } else if (tempOferta == -1 && (lower.equals("oferta") || lower.contains("oferta")
+                            && !lower.contains("precio") && !lower.contains("%"))) {
+                        tempOferta = c;
+                    } else if (tempDctoCt == -1 && (lower.contains("dcto") && lower.contains("ct")
+                            || lower.contains("dcto.") && lower.contains("ct"))) {
+                        tempDctoCt = c;
                     } else if (tempStock == -1 && (lower.contains("existencia") || lower.contains("stock")
                             || lower.contains("exist") || lower.contains("cantidad")
                             || lower.contains("disp"))) {
@@ -81,7 +85,8 @@ public class NenaParser implements SupplierParser {
                     colPrice = tempPrice;
                     colDesc = tempDesc;
                     colStock = tempStock;
-                    colDcto = tempDcto;
+                    colOferta = tempOferta;
+                    colDctoCt = tempDctoCt;
                     break;
                 }
                 if (tempBarcode >= 0) {
@@ -89,7 +94,8 @@ public class NenaParser implements SupplierParser {
                     colBarcode = tempBarcode;
                     colDesc = tempDesc;
                     colStock = tempStock;
-                    colDcto = tempDcto;
+                    colOferta = tempOferta;
+                    colDctoCt = tempDctoCt;
                     break;
                 }
             }
@@ -106,7 +112,8 @@ public class NenaParser implements SupplierParser {
             // Log detected header columns
             System.out.println("[NenaParser] Header at row " + headerRow
                     + ", barcode=" + colBarcode + ", price=" + colPrice
-                    + ", desc=" + colDesc + ", stock=" + colStock + ", dcto=" + colDcto);
+                    + ", desc=" + colDesc + ", stock=" + colStock
+                    + ", oferta=" + colOferta + ", dctoCt=" + colDctoCt);
 
             // Log the actual header names for debugging
             Row hdrRow = sheet.getRow(headerRow);
@@ -149,17 +156,25 @@ public class NenaParser implements SupplierParser {
                         diagCount++;
                     }
 
-                    // Parse discount from DCTO. EN FACTURA column
-                    double offerPct = 0;
-                    if (colDcto >= 0) {
-                        String dctoRaw = getCellString(row.getCell(colDcto)).trim();
-                        offerPct = extractDctoPercentage(dctoRaw);
+                    // Parse discount from OFERTA column
+                    double ofertaPct = 0;
+                    if (colOferta >= 0) {
+                        String ofertaRaw = getCellString(row.getCell(colOferta)).trim();
+                        ofertaPct = extractDctoPercentage(ofertaRaw);
+                    }
+
+                    // Parse discount from DCTO. CT column
+                    double dctoCtPct = 0;
+                    if (colDctoCt >= 0) {
+                        String dctoRaw = getCellString(row.getCell(colDctoCt)).trim();
+                        dctoCtPct = extractDctoPercentage(dctoRaw);
                     }
 
                     if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock, Supplier.NENA);
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, 0, stock, Supplier.NENA);
+                    sp.setDiscounts(ofertaPct, dctoCtPct);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

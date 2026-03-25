@@ -65,7 +65,7 @@ public class SyncOrchestrator {
                             sp.setBasePrice(sp.getBasePrice() / bcvRate);
                         }
                         // Paso 2: Recalcular netPrice para TODOS los proveedores
-                        sp.setNetPrice(sp.getBasePrice() * (1.0 - (sp.getOfferPct() / 100.0)));
+                        sp.recalcNet();
                     }
 
                     if (isSupplierInBs(supplier) && bcvRate > 1) {

@@ -12,8 +12,8 @@ import java.util.List;
 
 /**
  * Parser for Cobeca Excel files.
- * Extracts: Base = Precio_Referencial, Offer = Descuento_Proveedor.
- * NetPrice is computed: basePrice * (1 - offerPct / 100).
+ * Extracts: Base = Precio_Referencial, Discounts = Porcentaje_Cobeca, Porcentaje_Cobeca_Adicional, Descuento_Proveedor.
+ * NetPrice uses cascading: basePrice × (1-d1/100) × (1-d2/100) × (1-d3/100).
  */
 public class CobecaParser implements SupplierParser {
 
@@ -27,7 +27,8 @@ public class CobecaParser implements SupplierParser {
             Sheet sheet = wb.getSheetAt(0);
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1, colDiscount = -1, colProveedor = -1;
+            int colBarcode = -1, colPrice = -1, colStock = -1, colDesc = -1;
+            int colPctCobeca = -1, colPctAdicional = -1, colDescProveedor = -1, colProveedor = -1;
 
             for (int r = 0; r <= Math.min(10, sheet.getLastRowNum()); r++) {
                 Row row = sheet.getRow(r);
@@ -45,8 +46,14 @@ public class CobecaParser implements SupplierParser {
                         colPrice = c;
                     else if (val.contains("precio referencial") && !val.contains("final"))
                         colPrice = c;
+                    else if (val.contains("porcentaje_cobeca_adicional") || val.contains("porcentaje cobeca adicional")
+                            || val.contains("portecentaje_cobeca_adicional") || val.contains("portecentaje cobeca adicional"))
+                        colPctAdicional = c;
+                    else if (val.contains("porcentaje_cobeca") || val.contains("porcentaje cobeca")
+                            || val.contains("portecentaje_cobeca") || val.contains("portecentaje cobeca"))
+                        colPctCobeca = c;
                     else if (val.contains("descuento_proveedor") || val.contains("descuento proveedor"))
-                        colDiscount = c;
+                        colDescProveedor = c;
                     else if (val.contains("existencia") || val.contains("exist"))
                         colStock = c;
                     else if (colDesc == -1
@@ -82,15 +89,22 @@ public class CobecaParser implements SupplierParser {
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
                     String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
                             : "";
-                    double offerPct = colDiscount >= 0
-                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colDiscount)))
+                    double pctCobeca = colPctCobeca >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPctCobeca)))
+                            : 0;
+                    double pctAdicional = colPctAdicional >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPctAdicional)))
+                            : 0;
+                    double descProveedor = colDescProveedor >= 0
+                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colDescProveedor)))
                             : 0;
 
                     if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock,
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, 0, stock,
                             Supplier.COBECA);
+                    sp.setDiscounts(pctCobeca, pctAdicional, descProveedor);
                     if (colProveedor >= 0) {
                         sp.setBrand(getCellString(row.getCell(colProveedor)).trim());
                     }

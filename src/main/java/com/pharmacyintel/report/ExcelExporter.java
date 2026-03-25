@@ -266,6 +266,7 @@ public class ExcelExporter {
             setCellStyled(header, col++, "Proveedor", headerStyle);
         } else {
             setCellStyled(header, col++, "MARCA", headerStyle);
+            setCellStyled(header, col++, "FECHVENC", headerStyle);
             setCellStyled(header, col++, "DIF %", headerStyle);
             setCellStyled(header, col++, "DIF USD", headerStyle);
             setCellStyled(header, col++, "Margen USD", headerStyle);
@@ -325,6 +326,13 @@ public class ExcelExporter {
 
             // Sin Inventario: no DIF / Margen columns
             if (!isSinInventario) {
+                // FECHVENC column
+                Cell fechVencCell = row.createCell(col++);
+                String fechVenc = mp.getExpirationDate();
+                if (fechVenc != null && !fechVenc.isEmpty()) {
+                    fechVencCell.setCellValue(fechVenc);
+                }
+
                 Cell diffPctCell = row.createCell(col++);
                 if (mp.getDiffPct(stockOnly) > 0) {
                     diffPctCell.setCellValue(mp.getDiffPct(stockOnly) / 100.0);
@@ -373,6 +381,7 @@ public class ExcelExporter {
         setCellStyled(header, col++, "Código Interno", headerStyle);
         setCellStyled(header, col++, "Descripción", headerStyle);
         setCellStyled(header, col++, "MARCA", headerStyle);
+        setCellStyled(header, col++, "FECHVENC", headerStyle);
 
         // Metric columns per supplier
         String metricPrefix;
@@ -424,6 +433,9 @@ public class ExcelExporter {
             setCellText(row, col++, mp.getInternalCode() != null ? mp.getInternalCode() : "", textStyle);
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
             setCellText(row, col++, mp.getBrand() != null ? mp.getBrand() : "", textStyle);
+            // FECHVENC
+            String fechVenc = mp.getExpirationDate();
+            setCellText(row, col++, fechVenc != null ? fechVenc : "", textStyle);
 
             // --- For offer modes: find best and worst OF% for coloring ---
             Supplier bestOfferSupplier = null;

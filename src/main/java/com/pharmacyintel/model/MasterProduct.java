@@ -334,6 +334,14 @@ public class MasterProduct {
     }
 
     /**
+     * Returns the expiration date (FECHVENC) from DroActiva (if available).
+     */
+    public String getExpirationDate() {
+        SupplierProduct sp = supplierPrices.get(Supplier.DROACTIVA);
+        return sp != null ? sp.getExpirationDate() : null;
+    }
+
+    /**
      * Fill empty/invalid description from another source (e.g. universal catalog).
      */
     public void fillEmptyDescription(String fallbackDesc) {

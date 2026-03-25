@@ -12,9 +12,8 @@ import java.util.List;
 
 /**
  * Parser for F24 (Farma 24) Excel files.
- * Extracts: Base = PRECIO MAYOR (Bs), Offer = sum of PROMO(%) + OFERTA(%) +
- * DA(%).
- * NetPrice is computed: basePrice * (1 - offerPct / 100).
+ * Extracts: Base = PRECIO MAYOR (Bs), Discounts = PROMO(%), OFERTA(%), DA(%).
+ * NetPrice uses cascading: basePrice × (1-PROMO/100) × (1-OFERTA/100) × (1-DA/100).
  * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
  */
 public class F24Parser implements SupplierParser {
@@ -124,25 +123,26 @@ public class F24Parser implements SupplierParser {
                             : "";
                     int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
 
-                    // Sum discount from PROMO(%) + OFERTA(%) + DA(%)
-                    double offerPct = 0;
+                    // Read individual discount percentages
+                    double promo = 0, oferta = 0, da = 0;
                     if (colPromo >= 0) {
                         String raw = getCellString(row.getCell(colPromo)).replace("%", "").trim();
-                        offerPct += DataSanitizer.parseDecimal(raw);
+                        promo = DataSanitizer.parseDecimal(raw);
                     }
                     if (colOferta >= 0) {
                         String raw = getCellString(row.getCell(colOferta)).replace("%", "").trim();
-                        offerPct += DataSanitizer.parseDecimal(raw);
+                        oferta = DataSanitizer.parseDecimal(raw);
                     }
                     if (colDa >= 0) {
                         String raw = getCellString(row.getCell(colDa)).replace("%", "").trim();
-                        offerPct += DataSanitizer.parseDecimal(raw);
+                        da = DataSanitizer.parseDecimal(raw);
                     }
 
                     if (barcode.isEmpty() || basePrice <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, offerPct, stock, Supplier.F24);
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, 0, stock, Supplier.F24);
+                    sp.setDiscounts(promo, oferta, da);
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows

@@ -6,29 +6,56 @@ public class SupplierProduct {
     private String internalCode;
     private String brand;
     private double basePrice;
-    private double offerPct;
+    /** Individual discount percentages applied in cascade (e.g. DA, DA2, DV). */
+    private double[] discounts = {};
     private double netPrice;
     private int stock;
     private Supplier supplier;
     private double iva;
+    private String expirationDate;
 
     public SupplierProduct() {
     }
 
+    /**
+     * Legacy constructor — treats the single offerPct as the only discount.
+     */
     public SupplierProduct(String barcode, String description, double basePrice, double offerPct, int stock,
             Supplier supplier) {
         this.barcode = barcode;
         this.description = description;
         this.basePrice = basePrice;
-        this.offerPct = offerPct;
-        this.netPrice = basePrice * (1.0 - offerPct / 100.0);
+        this.discounts = offerPct != 0 ? new double[] { offerPct } : new double[] {};
         this.stock = stock;
         this.supplier = supplier;
+        recalcNet();
     }
 
-    /** Recalculate netPrice from basePrice and offerPct */
+    /**
+     * Set individual discount percentages (cascading).
+     * Example: setDiscounts(10, 5, 2) → applies 10%, then 5%, then 2% sequentially.
+     * Zero-value discounts at the end are ignored.
+     */
+    public void setDiscounts(double... discounts) {
+        this.discounts = discounts != null ? discounts : new double[] {};
+        recalcNet();
+    }
+
+    /** @return the individual discount percentages array */
+    public double[] getDiscounts() {
+        return discounts;
+    }
+
+    /**
+     * Recalculate netPrice using cascading multiplicative discounts.
+     * NetPrice = basePrice × (1 - d1/100) × (1 - d2/100) × ...
+     */
     public void recalcNet() {
-        this.netPrice = basePrice * (1.0 - offerPct / 100.0);
+        double price = basePrice;
+        for (double d : discounts) {
+            price *= (1.0 - d / 100.0);
+        }
+        this.netPrice = price;
     }
 
     // --- Getters & Setters ---
@@ -56,12 +83,21 @@ public class SupplierProduct {
         this.basePrice = basePrice;
     }
 
+    /**
+     * Returns the effective total discount percentage computed from cascading.
+     * Formula: (1 - netPrice / basePrice) × 100
+     */
     public double getOfferPct() {
-        return offerPct;
+        if (basePrice <= 0) return 0;
+        return (1.0 - netPrice / basePrice) * 100.0;
     }
 
+    /**
+     * Legacy setter — sets a single discount value.
+     */
     public void setOfferPct(double offerPct) {
-        this.offerPct = offerPct;
+        this.discounts = offerPct != 0 ? new double[] { offerPct } : new double[] {};
+        recalcNet();
     }
 
     public double getNetPrice() {
@@ -71,37 +107,7 @@ public class SupplierProduct {
     public void setNetPrice(double netPrice) {
         this.netPrice = netPrice;
     }
-
-    /** @deprecated Use getNetPrice() */
-    public double getNetUsd() {
-        return netPrice;
-    }
-
-    /** @deprecated Use setNetPrice() */
-    public void setNetUsd(double net) {
-        this.netPrice = net;
-    }
-
-    /** @deprecated Use getBasePrice() */
-    public double getPriceUsd() {
-        return basePrice;
-    }
-
-    /** @deprecated Use setBasePrice() */
-    public void setPriceUsd(double price) {
-        this.basePrice = price;
-    }
-
-    /** @deprecated Use getOfferPct() */
-    public double getDiscountPct() {
-        return offerPct;
-    }
-
-    /** @deprecated Use setOfferPct() */
-    public void setDiscountPct(double pct) {
-        this.offerPct = pct;
-    }
-
+    
     public int getStock() {
         return stock;
     }
@@ -142,11 +148,22 @@ public class SupplierProduct {
         this.iva = iva;
     }
 
+    public String getExpirationDate() {
+        return expirationDate;
+    }
+
+    public void setExpirationDate(String expirationDate) {
+        this.expirationDate = expirationDate;
+    }
+
     public boolean hasStock() {
         return stock > 0;
     }
 
     public boolean hasDiscount() {
-        return offerPct > 0;
+        for (double d : discounts) {
+            if (d > 0) return true;
+        }
+        return false;
     }
 }
