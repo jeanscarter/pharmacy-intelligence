@@ -10,6 +10,7 @@ public class ConsolidationEngine {
     private final Map<String, MasterProduct> masterCatalog = new LinkedHashMap<>();
     private final Map<String, MasterProduct> universalCatalog = new LinkedHashMap<>();
     private Map<Supplier, List<SupplierProduct>> rawSupplierData;
+    private Map<String, String> imsData;
 
     /**
      * Consolidate with mode selection.
@@ -106,6 +107,7 @@ public class ConsolidationEngine {
         consolidate(includeAllProducts);
         consolidateUniversal();
         fillDescriptions();
+        applyImsCodes();
         computeCompetitiveness();
         simulateMargin(marginPct);
         return masterCatalog;
@@ -118,6 +120,7 @@ public class ConsolidationEngine {
         consolidate(includeAllProducts);
         consolidateUniversal();
         fillDescriptions();
+        applyImsCodes();
         computeCompetitiveness();
         simulateMargin(marginPct);
     }
@@ -165,6 +168,38 @@ public class ConsolidationEngine {
 
     public Map<String, MasterProduct> getMasterCatalog() {
         return masterCatalog;
+    }
+
+    public void setImsData(Map<String, String> imsData) {
+        this.imsData = imsData;
+    }
+
+    /**
+     * Merge IMS codes into MasterProducts using internal code (COD INT) as key.
+     */
+    private void applyImsCodes() {
+        if (imsData == null || imsData.isEmpty())
+            return;
+
+        for (MasterProduct mp : masterCatalog.values()) {
+            String internalCode = mp.getInternalCode();
+            if (internalCode != null && !internalCode.isEmpty()) {
+                String codIms = imsData.get(internalCode);
+                if (codIms != null) {
+                    mp.setCodIms(codIms);
+                }
+            }
+        }
+        // Also apply to universal catalog
+        for (MasterProduct mp : universalCatalog.values()) {
+            String internalCode = mp.getInternalCode();
+            if (internalCode != null && !internalCode.isEmpty()) {
+                String codIms = imsData.get(internalCode);
+                if (codIms != null) {
+                    mp.setCodIms(codIms);
+                }
+            }
+        }
     }
 
     public Map<String, MasterProduct> getUniversalCatalog() {

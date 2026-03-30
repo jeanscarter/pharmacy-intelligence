@@ -243,6 +243,7 @@ public class ExcelExporter {
         Row header = sheet.createRow(3);
         int col = 0;
         setCellStyled(header, col++, "Código de Barras", headerStyle);
+        setCellStyled(header, col++, "COD IMS", headerStyle);
         if (!isSinInventario) {
             setCellStyled(header, col++, "Código Interno", headerStyle);
         }
@@ -280,6 +281,7 @@ public class ExcelExporter {
             col = 0;
 
             setCellText(row, col++, mp.getBarcode(), textStyle);
+            setCellText(row, col++, mp.getCodIms() != null ? mp.getCodIms() : "", textStyle);
             if (!isSinInventario) {
                 setCellText(row, col++, mp.getInternalCode() != null ? mp.getInternalCode() : "", textStyle);
             }
@@ -378,6 +380,7 @@ public class ExcelExporter {
         Row header = sheet.createRow(3);
         int col = 0;
         setCellStyled(header, col++, "Código de Barras", headerStyle);
+        setCellStyled(header, col++, "COD IMS", headerStyle);
         setCellStyled(header, col++, "Código Interno", headerStyle);
         setCellStyled(header, col++, "Descripción", headerStyle);
         setCellStyled(header, col++, "MARCA", headerStyle);
@@ -430,6 +433,7 @@ public class ExcelExporter {
             col = 0;
 
             setCellText(row, col++, mp.getBarcode(), textStyle);
+            setCellText(row, col++, mp.getCodIms() != null ? mp.getCodIms() : "", textStyle);
             setCellText(row, col++, mp.getInternalCode() != null ? mp.getInternalCode() : "", textStyle);
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
             setCellText(row, col++, mp.getBrand() != null ? mp.getBrand() : "", textStyle);

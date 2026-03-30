@@ -33,6 +33,8 @@ public class FileUploadPanel extends JPanel {
     private final JCheckBox fetchBcvCheck;
     private final JButton processBtn;
     private final OnProcessListener listener;
+    private File imsFile;
+    private JLabel imsFileLabel;
 
     public FileUploadPanel(OnProcessListener listener) {
         this.listener = listener;
@@ -59,6 +61,10 @@ public class FileUploadPanel extends JPanel {
             grid.add(card, "grow, h 140!");
         }
         add(grid, "growx");
+
+        // IMS file slot (optional)
+        JPanel imsCard = createImsFileCard();
+        add(imsCard, "growx, h 70!");
 
         // BCV Rate section
         JPanel bcvPanel = new JPanel(new MigLayout("insets 16, fillx", "[]16[]16[]push[]", ""));
@@ -234,5 +240,92 @@ public class FileUploadPanel extends JPanel {
 
     public Map<Supplier, File> getSelectedFiles() {
         return selectedFiles;
+    }
+
+    public File getImsFile() {
+        return imsFile;
+    }
+
+    private JPanel createImsFileCard() {
+        RoundedPanel card = new RoundedPanel(16);
+        card.setLayout(new MigLayout("insets 12 16 12 16, fill", "[]16[grow]16[]", "[]"));
+        card.setBackground(CARD_BG);
+
+        JLabel icon = new JLabel("📋");
+        icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
+        card.add(icon);
+
+        JPanel textPanel = new JPanel(new MigLayout("insets 0, wrap", "[grow]", "[]2[]"));
+        textPanel.setOpaque(false);
+
+        JLabel nameLabel = new JLabel("Archivo IMS (Opcional)");
+        nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        nameLabel.setForeground(Color.WHITE);
+        textPanel.add(nameLabel);
+
+        imsFileLabel = new JLabel("Arrastra o haz clic para seleccionar — CSV con COD INT y COD IMS");
+        imsFileLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        imsFileLabel.setForeground(new Color(100, 110, 130));
+        textPanel.add(imsFileLabel);
+
+        card.add(textPanel, "grow");
+
+        JButton browseBtn = new JButton("Seleccionar");
+        browseBtn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        browseBtn.setBackground(new Color(70, 75, 88));
+        browseBtn.setForeground(Color.WHITE);
+        browseBtn.setFocusPainted(false);
+        browseBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        browseBtn.addActionListener(e -> browseImsFile());
+        card.add(browseBtn);
+
+        // Drag and drop
+        new DropTarget(card, new DropTargetAdapter() {
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    @SuppressWarnings("unchecked")
+                    java.util.List<File> files = (java.util.List<File>) dtde.getTransferable()
+                            .getTransferData(DataFlavor.javaFileListFlavor);
+                    if (!files.isEmpty()) {
+                        setImsFile(files.get(0));
+                    }
+                } catch (Exception ex) {
+                    Toast.show("Error al cargar archivo IMS", Toast.Type.ERROR);
+                }
+            }
+        });
+
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                browseImsFile();
+            }
+        });
+
+        return card;
+    }
+
+    private void browseImsFile() {
+        JFileChooser chooser = new JFileChooser();
+        File downloadsDir = new File(System.getProperty("user.home"), "Downloads");
+        if (!downloadsDir.exists())
+            downloadsDir = new File(System.getProperty("user.home"), "Descargas");
+        chooser.setCurrentDirectory(downloadsDir.exists() ? downloadsDir : new File(System.getProperty("user.dir")));
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            setImsFile(chooser.getSelectedFile());
+        }
+    }
+
+    private void setImsFile(File file) {
+        this.imsFile = file;
+        imsFileLabel.setText("✓ " + file.getName());
+        imsFileLabel.setForeground(SUCCESS);
+        imsFileLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        Toast.show("Archivo IMS: " + file.getName(), Toast.Type.SUCCESS);
     }
 }

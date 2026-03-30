@@ -5,6 +5,7 @@ import java.util.*;
 public class MasterProduct {
     private String barcode;
     private String description;
+    private String codIms;
     private final Map<Supplier, SupplierProduct> supplierPrices = new EnumMap<>(Supplier.class);
 
     // Computed fields
@@ -309,6 +310,14 @@ public class MasterProduct {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getCodIms() {
+        return codIms;
+    }
+
+    public void setCodIms(String codIms) {
+        this.codIms = codIms;
     }
 
     /**

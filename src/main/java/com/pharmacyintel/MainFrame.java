@@ -21,6 +21,7 @@ public class MainFrame extends JFrame {
     private CardLayout cardLayout;
     private JProgressBar progressBar;
     private JLabel statusLabel;
+    private FileUploadPanel uploadPanel;
 
     public MainFrame() {
         setTitle("Pharmacy Intelligence — Análisis Comparativo de Precios");
@@ -37,7 +38,7 @@ public class MainFrame extends JFrame {
         rootPanel.setBackground(ROOT_BG);
 
         // Phase 1: Upload
-        FileUploadPanel uploadPanel = new FileUploadPanel(this::onProcess);
+        uploadPanel = new FileUploadPanel(this::onProcess);
         rootPanel.add(uploadPanel, "UPLOAD");
 
         // Loading screen
@@ -82,7 +83,8 @@ public class MainFrame extends JFrame {
             @Override
             protected Void doInBackground() {
                 File outputDir = new File(System.getProperty("user.dir"));
-                orchestrator.execute(files, outputDir, fetchBcv);
+                File imsFile = uploadPanel.getImsFile();
+                orchestrator.execute(files, outputDir, fetchBcv, imsFile);
                 return null;
             }
         }.execute();

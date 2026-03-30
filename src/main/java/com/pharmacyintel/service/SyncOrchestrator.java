@@ -25,7 +25,7 @@ public class SyncOrchestrator {
         this.listener = listener;
     }
 
-    public void execute(Map<Supplier, File> supplierFiles, File outputDir, boolean fetchBcv) {
+    public void execute(Map<Supplier, File> supplierFiles, File outputDir, boolean fetchBcv, File imsFile) {
         try {
             // Phase 1: BCV Rate
             reportProgress("Obteniendo tasa BCV...", 5);
@@ -82,7 +82,20 @@ public class SyncOrchestrator {
                 }
             }
 
-            // Phase 3: Consolidate and analyze
+            // Phase 3: Parse IMS file (optional)
+            if (imsFile != null && imsFile.exists()) {
+                reportProgress("Procesando archivo IMS...", 72);
+                try {
+                    ImsParser imsParser = new ImsParser();
+                    java.util.Map<String, String> imsData = imsParser.parse(imsFile);
+                    engine.setImsData(imsData);
+                    reportProgress("IMS: " + imsData.size() + " códigos cargados", 74);
+                } catch (Exception e) {
+                    reportError("IMS", "Error al procesar archivo IMS: " + e.getMessage());
+                }
+            }
+
+            // Phase 4: Consolidate and analyze
             reportProgress("Consolidando datos...", 75);
             double margin = GlobalConfig.getInstance().getTargetMarginPct();
             engine.process(supplierData, margin, false);
