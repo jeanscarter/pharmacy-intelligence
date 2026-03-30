@@ -1,56 +1,86 @@
 package com.pharmacyintel.parser;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Parser for the optional IMS CSV file.
- * Expected headers: COD INT,COD IMS,PROVEEDOR,DESCRIPCIÓN DEL PRODUCTO
+ * Parser for the optional IMS Excel file.
+ * Expected headers: COD INT, COD IMS
  * Returns Map<COD_INT, COD_IMS> for fast merging.
  */
 public class ImsParser {
 
+    private final DataFormatter formatter = new DataFormatter();
+
     /**
-     * Parse the IMS CSV file and return a mapping of internal code to IMS code.
+     * Parse the IMS Excel file and return a mapping of internal code to IMS code.
      *
-     * @param file the CSV file to parse
+     * @param file the Excel file to parse
      * @return Map where key = COD INT, value = COD IMS
      */
     public Map<String, String> parse(File file) {
         Map<String, String> imsMap = new HashMap<>();
 
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+        try (FileInputStream fis = new FileInputStream(file);
+             Workbook wb = new XSSFWorkbook(fis)) {
 
-            String headerLine = br.readLine();
-            if (headerLine == null)
-                return imsMap;
+            Sheet sheet = wb.getSheetAt(0);
 
-            // Remove UTF-8 BOM if present
-            headerLine = headerLine.replace("\uFEFF", "");
+            int headerRow = -1;
+            int colCodInt = -1;
+            int colCodIms = -1;
 
-            // Detect delimiter: try comma first, then semicolon
-            String delimiter = headerLine.contains(";") ? ";" : ",";
-            String[] headers = headerLine.split(delimiter, -1);
+            // Search for headers in the first 15 rows
+            for (int r = 0; r <= Math.min(15, sheet.getLastRowNum()); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
 
-            int colCodInt = findCol(headers, "COD INT");
-            int colCodIms = findCol(headers, "COD IMS");
+                int codIntHit = -1;
+                int codImsHit = -1;
 
-            if (colCodInt < 0 || colCodIms < 0) {
+                for (int c = 0; c < row.getLastCellNum(); c++) {
+                    String val = formatter.formatCellValue(row.getCell(c)).trim();
+                    if (val.equalsIgnoreCase("COD INT") || val.equalsIgnoreCase("COD_INT") || val.equalsIgnoreCase("CODINT")) {
+                        codIntHit = c;
+                    }
+                    if (val.equalsIgnoreCase("COD IMS") || val.equalsIgnoreCase("COD_IMS") || val.equalsIgnoreCase("CODIMS")) {
+                        codImsHit = c;
+                    }
+                }
+
+                if (codIntHit >= 0 && codImsHit >= 0) {
+                    headerRow = r;
+                    colCodInt = codIntHit;
+                    colCodIms = codImsHit;
+                    break;
+                }
+            }
+
+            if (headerRow == -1 || colCodInt == -1 || colCodIms == -1) {
                 System.err.println("[ImsParser] No se encontraron las columnas COD INT / COD IMS en el archivo.");
                 return imsMap;
             }
 
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.isBlank())
-                    continue;
+            // Read the data rows
+            for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+
                 try {
-                    String[] cols = line.split(delimiter, -1);
-                    String codInt = safeGet(cols, colCodInt).trim();
-                    String codIms = safeGet(cols, colCodIms).trim();
+                    String codInt = formatter.formatCellValue(row.getCell(colCodInt)).trim();
+                    String codIms = formatter.formatCellValue(row.getCell(colCodIms)).trim();
+                    
+                    // Zero-pad numeric internal codes to 6 digits to match DroActiva format
+                    if (codInt.matches("\\d+") && codInt.length() < 6) {
+                        try {
+                            codInt = String.format("%06d", Long.parseLong(codInt));
+                        } catch (Exception ignored) {}
+                    }
 
                     if (!codInt.isEmpty() && !codIms.isEmpty()) {
                         imsMap.put(codInt, codIms);
@@ -64,19 +94,5 @@ public class ImsParser {
         }
 
         return imsMap;
-    }
-
-    private int findCol(String[] headers, String keyword) {
-        for (int i = 0; i < headers.length; i++) {
-            if (headers[i].trim().equalsIgnoreCase(keyword))
-                return i;
-        }
-        return -1;
-    }
-
-    private String safeGet(String[] cols, int idx) {
-        if (idx < 0 || idx >= cols.length)
-            return "";
-        return cols[idx];
     }
 }

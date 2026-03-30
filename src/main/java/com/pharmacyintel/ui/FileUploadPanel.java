@@ -263,7 +263,7 @@ public class FileUploadPanel extends JPanel {
         nameLabel.setForeground(Color.WHITE);
         textPanel.add(nameLabel);
 
-        imsFileLabel = new JLabel("Arrastra o haz clic para seleccionar — CSV con COD INT y COD IMS");
+        imsFileLabel = new JLabel("Arrastra o haz clic para seleccionar — Excel con COD INT y COD IMS");
         imsFileLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
         imsFileLabel.setForeground(new Color(100, 110, 130));
         textPanel.add(imsFileLabel);
@@ -314,7 +314,7 @@ public class FileUploadPanel extends JPanel {
         if (!downloadsDir.exists())
             downloadsDir = new File(System.getProperty("user.home"), "Descargas");
         chooser.setCurrentDirectory(downloadsDir.exists() ? downloadsDir : new File(System.getProperty("user.dir")));
-        chooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+        chooser.setFileFilter(new FileNameExtensionFilter("Excel files", "xlsx", "xls"));
 
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             setImsFile(chooser.getSelectedFile());
