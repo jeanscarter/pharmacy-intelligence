@@ -140,7 +140,7 @@ public class MainFrame extends JFrame {
                     protected File doInBackground() throws Exception {
                         com.pharmacyintel.report.ExcelExporter exporter = new com.pharmacyintel.report.ExcelExporter();
                         File outputDir = new File(System.getProperty("user.dir"));
-                        return exporter.export(engine.getMasterCatalog(),
+                        return exporter.export(engine.getMasterProductList(),
                                 com.pharmacyintel.model.GlobalConfig.getInstance().getBcvRate(), outputDir, "Todos",
                                 false);
                     }

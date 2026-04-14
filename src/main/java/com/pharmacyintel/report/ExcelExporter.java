@@ -12,7 +12,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Strategic Excel Export — adapts columns, sorting and filtering based on the
@@ -30,7 +29,7 @@ public class ExcelExporter {
     private static final String FILTER_PEOR_OFERTA = "Peor Oferta DroActiva";
     private static final String FILTER_SIN_INVENTARIO = "Productos sin Inventario";
 
-    public File export(Map<String, MasterProduct> catalog, double bcvRate, File outputDir, String activeFilter,
+    public File export(List<MasterProduct> visibleProducts, double bcvRate, File outputDir, String activeFilter,
             boolean stockOnly)
             throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
@@ -80,8 +79,8 @@ public class ExcelExporter {
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
         infoRow.createCell(6).setCellValue("Filtro: " + activeFilter);
 
-        // --- Filter + Sort products ---
-        List<MasterProduct> products = filterAndSort(catalog, activeFilter, isSinInventario);
+        // --- Sort products ---
+        List<MasterProduct> products = sortProducts(visibleProducts, activeFilter, isSinInventario);
 
         // --- Write data based on mode ---
         int colCount;
@@ -119,95 +118,34 @@ public class ExcelExporter {
     // FILTERING & SORTING
     // ====================================================================
 
-    private List<MasterProduct> filterAndSort(Map<String, MasterProduct> catalog, String activeFilter,
+    private List<MasterProduct> sortProducts(List<MasterProduct> visibleProducts, String activeFilter,
             boolean sinInventario) {
-        List<MasterProduct> all = new ArrayList<>(catalog.values());
 
-        List<MasterProduct> filtered;
         Comparator<MasterProduct> comparator;
 
         switch (activeFilter) {
             case FILTER_MEJOR_PRECIO -> {
-                // DroActiva is winner 
-                filtered = all.stream()
-                        .filter(mp -> mp.getWinnerSupplier() == BASE_SUPPLIER)
-                        .toList();
                 // Sort by DroActiva's stock descending, then by best offer
                 comparator = Comparator.comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
                         .thenComparingDouble(mp -> -mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             case FILTER_MEJOR_OFERTA -> {
-                // DroActiva has the best OF% among all suppliers
-                filtered = all.stream()
-                        .filter(mp -> {
-                            double ofDro = mp.getOfferPctForSupplier(BASE_SUPPLIER);
-                            if (ofDro <= 0)
-                                return false;
-                            for (Supplier s : SUPPLIERS) {
-                                if (s == BASE_SUPPLIER)
-                                    continue;
-                                if (mp.getOfferPctForSupplier(s) > ofDro)
-                                    return false;
-                            }
-                            return true;
-                        })
-                        .toList();
                 // Sort by DroActiva's stock descending, then by best offer
                 comparator = Comparator.comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
                         .thenComparingDouble(mp -> -mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             case FILTER_PEOR_NETO -> {
-                // DroActiva has the HIGHEST net price (true loser)
-                filtered = all.stream()
-                        .filter(mp -> {
-                            double netDro = mp.getNetPriceForSupplier(BASE_SUPPLIER);
-                            if (netDro <= 0)
-                                return false;
-                            boolean hasLower = false;
-                            for (Supplier s : SUPPLIERS) {
-                                if (s == BASE_SUPPLIER)
-                                    continue;
-                                double netOther = mp.getNetPriceForSupplier(s);
-                                if (netOther > 0 && netOther >= netDro)
-                                    return false;
-                                if (netOther > 0)
-                                    hasLower = true;
-                            }
-                            return hasLower;
-                        })
-                        .toList();
                 // Sort by highest net of DroActiva first (worst first), but stock first
                 comparator = Comparator.comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
                         .thenComparingDouble(mp -> -mp.getNetPriceForSupplier(BASE_SUPPLIER));
             }
             case FILTER_PEOR_OFERTA -> {
-                // DroActiva has the LOWEST OF% among suppliers with offers
-                filtered = all.stream()
-                        .filter(mp -> {
-                            double ofDro = mp.getOfferPctForSupplier(BASE_SUPPLIER);
-                            boolean hasHigher = false;
-                            for (Supplier s : SUPPLIERS) {
-                                if (s == BASE_SUPPLIER)
-                                    continue;
-                                double ofOther = mp.getOfferPctForSupplier(s);
-                                if (ofOther > 0 && ofOther > ofDro)
-                                    hasHigher = true;
-                                if (ofOther > 0 && ofOther <= ofDro)
-                                    return false;
-                            }
-                            return hasHigher;
-                        })
-                        .toList();
                 comparator = Comparator.comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
                         .thenComparingDouble(mp -> mp.getOfferPctForSupplier(BASE_SUPPLIER));
             }
             default -> {
                 // "Todos" or "Sin Inventario"
                 if (sinInventario) {
-                    // Only products where DroActiva has NO inventory
-                    filtered = all.stream()
-                            .filter(mp -> mp.getStockForSupplier(BASE_SUPPLIER) <= 0)
-                            .toList();
                     // Sort by Cobeca's inventory for "Sin Inventario"
                     comparator = Comparator
                             .comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(Supplier.COBECA))
@@ -215,7 +153,6 @@ public class ExcelExporter {
                             .thenComparingInt(mp -> -mp.getPositionForSupplier(BASE_SUPPLIER))
                             .thenComparing(mp -> mp.getDescription() != null ? mp.getDescription() : "");
                 } else {
-                    filtered = all;
                     // Normal sort by DroActiva's inventory
                     comparator = Comparator
                             .comparingInt((MasterProduct mp) -> -mp.getStockForSupplier(BASE_SUPPLIER))
@@ -226,7 +163,7 @@ public class ExcelExporter {
             }
         }
 
-        return filtered.stream().sorted(comparator).toList();
+        return visibleProducts.stream().sorted(comparator).toList();
     }
 
     // ====================================================================

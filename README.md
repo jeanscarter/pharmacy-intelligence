@@ -19,7 +19,7 @@ Una aplicación de escritorio moderna desarrollada en Java (Swing + FlatLaf) par
 
 ## 🛠️ Tecnologías
 
-*   **Lenguaje:** Java 17+
+*   **Lenguaje:** Java 25
 *   **UI:** Swing con [FlatLaf](https://www.formdev.com/flatlaf/) (Look and Feel moderno y oscuro).
 *   **Layout:** MigLayout.
 *   **Procesamiento Excel:** Apache POI.
