@@ -116,7 +116,7 @@ public class SyncOrchestrator {
     }
 
     private boolean isSupplierInBs(Supplier supplier) {
-        return supplier == Supplier.NENA || supplier == Supplier.F24;
+        return supplier == Supplier.NENA;
     }
 
     public ConsolidationEngine getEngine() {

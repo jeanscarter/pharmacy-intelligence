@@ -12,9 +12,8 @@ import java.util.List;
 
 /**
  * Parser for F24 (Farma 24) Excel files.
- * Extracts: Base = PRECIO MAYOR (Bs), Discounts = PROMO(%), OFERTA(%), DA(%).
- * NetPrice uses cascading: basePrice × (1-PROMO/100) × (1-OFERTA/100) × (1-DA/100).
- * Prices are in Bs — the SyncOrchestrator handles conversion to USD.
+ * Reconstructed: Now extracts directly from "NETO $" as USD, as the previous "PRECIO MAYOR (Bs)" was dropped.
+ * Calculates basePrice reversing the discounts: DL (%) and PROMO (%).
  */
 public class F24Parser implements SupplierParser {
 
@@ -26,10 +25,11 @@ public class F24Parser implements SupplierParser {
                 Workbook wb = new XSSFWorkbook(fis)) {
 
             Sheet sheet = wb.getSheetAt(0);
+            FormulaEvaluator evaluator = wb.getCreationHelper().createFormulaEvaluator();
 
             int headerRow = -1;
-            int colBarcode = -1, colPrice = -1, colDesc = -1, colStock = -1;
-            int colPromo = -1, colOferta = -1, colDa = -1;
+            int colBarcode = -1, colNetoUsd = -1, colDesc = -1, colStock = -1;
+            int colPromo = -1, colDl = -1, colBrand = -1;
 
             // Scan up to 20 rows for headers
             for (int r = 0; r <= Math.min(20, sheet.getLastRowNum()); r++) {
@@ -37,11 +37,11 @@ public class F24Parser implements SupplierParser {
                 if (row == null)
                     continue;
 
-                int tempBarcode = -1, tempPrice = -1, tempDesc = -1, tempStock = -1;
-                int tempPromo = -1, tempOferta = -1, tempDa = -1;
+                int tempBarcode = -1, tempNetoUsd = -1, tempDesc = -1, tempStock = -1;
+                int tempPromo = -1, tempDl = -1, tempBrand = -1;
 
                 for (int c = 0; c < row.getLastCellNum(); c++) {
-                    String val = getCellString(row.getCell(c)).trim();
+                    String val = getCellString(row.getCell(c), evaluator).trim();
                     String lower = val.toLowerCase().replaceAll("[áàä]", "a")
                             .replaceAll("[éèë]", "e")
                             .replaceAll("[íìï]", "i")
@@ -52,15 +52,14 @@ public class F24Parser implements SupplierParser {
                             || lower.contains("codigo barra") || lower.contains("ean")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    } else if (lower.contains("precio") && lower.contains("mayor") && lower.contains("bs")) {
-                        // PRECIO MAYOR (Bs) — explicitly in Bs
-                        tempPrice = c;
+                    } else if ((lower.contains("neto") && lower.contains("$")) || lower.equals("neto usd")) {
+                        tempNetoUsd = c;
+                    } else if (lower.contains("dl") && lower.contains("%")) {
+                        tempDl = c;
                     } else if (lower.contains("promo") && lower.contains("%")) {
                         tempPromo = c;
-                    } else if (lower.contains("oferta") && lower.contains("%")) {
-                        tempOferta = c;
-                    } else if (lower.contains("da") && lower.contains("%")) {
-                        tempDa = c;
+                    } else if (lower.contains("marca") || lower.equals("marca")) {
+                        tempBrand = c;
                     } else if (lower.contains("descripcion") || lower.contains("producto")
                             || lower.contains("nombre") || lower.contains("articulo")) {
                         tempDesc = c;
@@ -71,43 +70,40 @@ public class F24Parser implements SupplierParser {
                     }
                 }
 
-                if (tempBarcode >= 0 && tempPrice >= 0) {
+                if (tempBarcode >= 0 && tempNetoUsd >= 0) {
                     headerRow = r;
                     colBarcode = tempBarcode;
-                    colPrice = tempPrice;
+                    colNetoUsd = tempNetoUsd;
                     colDesc = tempDesc;
                     colStock = tempStock;
                     colPromo = tempPromo;
-                    colOferta = tempOferta;
-                    colDa = tempDa;
+                    colDl = tempDl;
+                    colBrand = tempBrand;
                     break;
                 }
+                
+                // Fallback (keep tracking if partial match is found)
                 if (tempBarcode >= 0) {
                     headerRow = r;
                     colBarcode = tempBarcode;
+                    colNetoUsd = tempNetoUsd;
                     colDesc = tempDesc;
                     colStock = tempStock;
                     colPromo = tempPromo;
-                    colOferta = tempOferta;
-                    colDa = tempDa;
-                    break;
+                    colDl = tempDl;
+                    colBrand = tempBrand;
                 }
             }
 
             if (headerRow == -1 || colBarcode == -1) {
                 throw new Exception("No se pudo detectar la fila de encabezados de F24. "
-                        + "Buscado: columna con 'barra', 'codigo', 'ean' en primeras 20 filas.");
-            }
-
-            // Infer price column from data if not detected
-            if (colPrice == -1) {
-                colPrice = inferPriceColumn(sheet, headerRow, colBarcode, colDesc);
+                        + "Buscado: columna con 'barra' o 'codigo' y 'neto $' en primeras 20 filas.");
             }
 
             System.out.println("[F24Parser] Header at row " + headerRow
-                    + ", barcode=" + colBarcode + ", price=" + colPrice
+                    + ", barcode=" + colBarcode + ", netoUsd=" + colNetoUsd
                     + ", desc=" + colDesc + ", stock=" + colStock
-                    + ", promo=" + colPromo + ", oferta=" + colOferta + ", da=" + colDa);
+                    + ", promo=" + colPromo + ", dl=" + colDl + ", brand=" + colBrand);
 
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
@@ -115,34 +111,45 @@ public class F24Parser implements SupplierParser {
                     continue;
 
                 try {
-                    String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode)));
-                    double basePrice = colPrice >= 0
-                            ? DataSanitizer.parseDecimal(getCellString(row.getCell(colPrice)))
-                            : 0;
-                    String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc)))
-                            : "";
-                    int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock))) : 1;
+                    String barcode = DataSanitizer.cleanBarcode(getCellString(row.getCell(colBarcode), evaluator));
+                    String desc = colDesc >= 0 ? DataSanitizer.cleanDescription(getCellString(row.getCell(colDesc), evaluator)) : "";
+                    int stock = colStock >= 0 ? DataSanitizer.parseStock(getCellString(row.getCell(colStock), evaluator)) : 1;
 
                     // Read individual discount percentages
-                    double promo = 0, oferta = 0, da = 0;
+                    double promo = 0, dl = 0;
                     if (colPromo >= 0) {
-                        String raw = getCellString(row.getCell(colPromo)).replace("%", "").trim();
+                        String raw = getCellString(row.getCell(colPromo), evaluator).replace("%", "").trim();
                         promo = DataSanitizer.parseDecimal(raw);
                     }
-                    if (colOferta >= 0) {
-                        String raw = getCellString(row.getCell(colOferta)).replace("%", "").trim();
-                        oferta = DataSanitizer.parseDecimal(raw);
-                    }
-                    if (colDa >= 0) {
-                        String raw = getCellString(row.getCell(colDa)).replace("%", "").trim();
-                        da = DataSanitizer.parseDecimal(raw);
+                    if (colDl >= 0) {
+                        String raw = getCellString(row.getCell(colDl), evaluator).replace("%", "").trim();
+                        dl = DataSanitizer.parseDecimal(raw);
                     }
 
-                    if (barcode.isEmpty() || basePrice <= 0)
+                    double netUsd = 0;
+                    if (colNetoUsd >= 0) {
+                        netUsd = DataSanitizer.parseDecimal(getCellString(row.getCell(colNetoUsd), evaluator));
+                    }
+
+                    if (barcode.isEmpty() || netUsd <= 0)
                         continue;
 
-                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePrice, 0, stock, Supplier.F24);
-                    sp.setDiscounts(promo, oferta, da);
+                    // Reverse calculate the base price in USD
+                    double discountMultiplier = (1.0 - promo / 100.0) * (1.0 - dl / 100.0);
+                    double basePriceUsd = (discountMultiplier > 0 && discountMultiplier <= 1.0) 
+                            ? (netUsd / discountMultiplier) 
+                            : netUsd;
+
+                    SupplierProduct sp = new SupplierProduct(barcode, desc, basePriceUsd, 0, stock, Supplier.F24);
+                    sp.setDiscounts(promo, dl);
+                    
+                    if (colBrand >= 0) {
+                        String brandText = getCellString(row.getCell(colBrand), evaluator).trim();
+                        if (!brandText.isEmpty()) {
+                            sp.setBrand(brandText);
+                        }
+                    }
+
                     products.add(sp);
                 } catch (Exception e) {
                     // Skip malformed rows
@@ -154,28 +161,30 @@ public class F24Parser implements SupplierParser {
         return products;
     }
 
-    private int inferPriceColumn(Sheet sheet, int headerRow, int skipCol1, int skipCol2) {
-        for (int r = headerRow + 1; r <= Math.min(headerRow + 5, sheet.getLastRowNum()); r++) {
-            Row row = sheet.getRow(r);
-            if (row == null)
-                continue;
-            for (int c = 0; c < row.getLastCellNum(); c++) {
-                if (c == skipCol1 || c == skipCol2)
-                    continue;
-                Cell cell = row.getCell(c);
-                if (cell != null && cell.getCellType() == CellType.NUMERIC) {
-                    double val = cell.getNumericCellValue();
-                    if (val > 0.01 && val < 999999)
-                        return c;
-                }
-            }
-        }
-        return -1;
-    }
-
-    private String getCellString(Cell cell) {
+    private String getCellString(Cell cell, FormulaEvaluator evaluator) {
         if (cell == null)
             return "";
+        
+        CellType type = cell.getCellType();
+        if (type == CellType.FORMULA && evaluator != null) {
+            try {
+                CellValue cellValue = evaluator.evaluate(cell);
+                return switch (cellValue.getCellType()) {
+                    case STRING -> cellValue.getStringValue();
+                    case NUMERIC -> {
+                        double val = cellValue.getNumberValue();
+                        if (val == Math.floor(val) && !Double.isInfinite(val))
+                            yield String.valueOf((long) val);
+                        yield String.valueOf(val);
+                    }
+                    case BOOLEAN -> String.valueOf(cellValue.getBooleanValue());
+                    default -> "";
+                };
+            } catch (Exception e) {
+                // fallback to cache below
+            }
+        }
+
         return switch (cell.getCellType()) {
             case STRING -> cell.getStringCellValue();
             case NUMERIC -> {
