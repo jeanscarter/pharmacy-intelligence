@@ -403,10 +403,11 @@ public class ProductTablePanel extends JPanel {
                                 continue;
                             Object netOther = entry.getValue(COL_PRECIO_CON_OF_START + si);
                             if (netOther != null) {
-                                double otherNet = ((Number) netOther).doubleValue();
-                                if (otherNet > 0 && otherNet >= netDro)
-                                    return false; // someone else has same or higher net
-                                if (otherNet > 0)
+                                double otherNetVal = ((Number) netOther).doubleValue();
+                                // PERMITIR EMPATES: Se cambia >= por > para que si alguien tiene el mismo precio, no lo descarte.
+                                if (otherNetVal > 0 && otherNetVal > netDro)
+                                    return false; 
+                                if (otherNetVal > 0)
                                     hasLower = true;
                             }
                         }

@@ -424,12 +424,15 @@ public class ExcelExporter {
                 }
 
                 Cell cell = row.createCell(col++);
-                if (val > 0) {
+                boolean hasStock = (mp.getStockForSupplier(s) > 0);
+
+                // Permitir valores > 0, o permitir exactamente 0 si estamos en modo Oferta y hay stock
+                if (val > 0 || (val == 0 && isOferta && hasStock)) {
                     if (isOferta) {
                         cell.setCellValue(Math.round(val));
                         cell.setCellStyle(intPctStyle);
                         // Color best/worst offer
-                        if (s == bestOfferSupplier) {
+                        if (s == bestOfferSupplier && val > 0) { 
                             cell.setCellStyle(winnerIntPctStyle);
                         }
                     } else {
@@ -495,13 +498,20 @@ public class ExcelExporter {
                 }
 
                 Cell diffAmtCell = row.createCell(col++);
-                if (diffAmt != 0) {
+                // Imprimir siempre, incluso si es 0, siempre que haya un precio base válido
+                if (droValue > 0 && allNetPrices != null && allNetPrices.size() >= 2) {
+                    diffAmtCell.setCellValue(diffAmt);
+                    diffAmtCell.setCellStyle(priceStyle);
+                } else if (!isPrecio && droValue > 0) {
                     diffAmtCell.setCellValue(diffAmt);
                     diffAmtCell.setCellStyle(priceStyle);
                 }
 
                 Cell diffPctCell = row.createCell(col++);
-                if (diffPctVal != 0) {
+                if (droValue > 0 && allNetPrices != null && allNetPrices.size() >= 2) {
+                    diffPctCell.setCellValue(diffPctVal);
+                    diffPctCell.setCellStyle(pctStyle);
+                } else if (!isPrecio && droValue > 0) {
                     diffPctCell.setCellValue(diffPctVal);
                     diffPctCell.setCellStyle(pctStyle);
                 }
