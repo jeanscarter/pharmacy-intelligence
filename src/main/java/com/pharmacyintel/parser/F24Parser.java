@@ -52,7 +52,7 @@ public class F24Parser implements SupplierParser {
                             || lower.contains("codigo barra") || lower.contains("ean")
                             || lower.equals("codigo") || lower.equals("cod")) {
                         tempBarcode = c;
-                    } else if ((lower.contains("neto") && lower.contains("$")) || lower.equals("neto usd")) {
+                    } else if ((lower.contains("neto") && (lower.contains("$") || lower.contains("usd"))) || lower.equals("neto $") || lower.equals("neto usd")) {
                         tempNetoUsd = c;
                     } else if (lower.contains("dl") && lower.contains("%")) {
                         tempDl = c;
@@ -105,6 +105,8 @@ public class F24Parser implements SupplierParser {
                     + ", desc=" + colDesc + ", stock=" + colStock
                     + ", promo=" + colPromo + ", dl=" + colDl + ", brand=" + colBrand);
 
+            int skippedBarcode = 0, skippedNet = 0, skippedExc = 0;
+
             for (int r = headerRow + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null)
@@ -128,11 +130,34 @@ public class F24Parser implements SupplierParser {
 
                     double netUsd = 0;
                     if (colNetoUsd >= 0) {
-                        netUsd = DataSanitizer.parseDecimal(getCellString(row.getCell(colNetoUsd), evaluator));
+                        Cell netCell = row.getCell(colNetoUsd);
+                        String cellStr = getCellString(netCell, evaluator);
+                        String raw = cellStr.replace("$", "").replace(",", "").trim();
+                        try {
+                            netUsd = DataSanitizer.parseDecimal(raw);
+                        } catch (Exception e) {
+                            // Fallback: try direct numeric read
+                            if (netCell != null) {
+                                try {
+                                    netUsd = netCell.getNumericCellValue();
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                        
+                        // RESCUE: If POI failed to evaluate and cached is 0, parse the formula string directly
+                        if (netUsd <= 0 && netCell != null && netCell.getCellType() == CellType.FORMULA) {
+                            netUsd = extractPriceFromFormula(netCell, row);
+                        }
                     }
 
-                    if (barcode.isEmpty() || netUsd <= 0)
+                    if (barcode.isEmpty()) {
+                        skippedBarcode++;
                         continue;
+                    }
+                    if (netUsd <= 0) {
+                        skippedNet++;
+                        continue;
+                    }
 
                     // Reverse calculate the base price in USD
                     double discountMultiplier = (1.0 - promo / 100.0) * (1.0 - dl / 100.0);
@@ -152,9 +177,14 @@ public class F24Parser implements SupplierParser {
 
                     products.add(sp);
                 } catch (Exception e) {
-                    // Skip malformed rows
+                    skippedExc++;
+                    if (skippedExc <= 3) {
+                        System.out.println("[F24Parser] EXCEPTION row " + r + ": " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                    }
                 }
             }
+            System.out.println("[F24Parser] Summary: skippedBarcode=" + skippedBarcode 
+                    + ", skippedNetUsd=" + skippedNet + ", skippedExceptions=" + skippedExc);
         }
 
         System.out.println("[F24Parser] Parsed " + products.size() + " products");
@@ -166,22 +196,39 @@ public class F24Parser implements SupplierParser {
             return "";
         
         CellType type = cell.getCellType();
-        if (type == CellType.FORMULA && evaluator != null) {
+        if (type == CellType.FORMULA) {
             try {
-                CellValue cellValue = evaluator.evaluate(cell);
-                return switch (cellValue.getCellType()) {
-                    case STRING -> cellValue.getStringValue();
-                    case NUMERIC -> {
-                        double val = cellValue.getNumberValue();
-                        if (val == Math.floor(val) && !Double.isInfinite(val))
-                            yield String.valueOf((long) val);
-                        yield String.valueOf(val);
-                    }
-                    case BOOLEAN -> String.valueOf(cellValue.getBooleanValue());
-                    default -> "";
-                };
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val) && !Double.isInfinite(val))
+                    return String.valueOf((long) val);
+                return String.valueOf(val);
             } catch (Exception e) {
-                // fallback to cache below
+                // Continuar a evaluar si falla la caché
+            }
+            
+            if (evaluator != null) {
+                try {
+                    CellValue cellValue = evaluator.evaluate(cell);
+                    return switch (cellValue.getCellType()) {
+                        case STRING -> cellValue.getStringValue();
+                        case NUMERIC -> {
+                            double val = cellValue.getNumberValue();
+                            if (val == Math.floor(val) && !Double.isInfinite(val))
+                                yield String.valueOf((long) val);
+                            yield String.valueOf(val);
+                        }
+                        case BOOLEAN -> String.valueOf(cellValue.getBooleanValue());
+                        default -> "";
+                    };
+                } catch (Exception e) {
+                    // Fallback a string
+                }
+            }
+            
+            try {
+                return cell.getStringCellValue();
+            } catch (Exception e) {
+                return "";
             }
         }
 
@@ -194,18 +241,55 @@ public class F24Parser implements SupplierParser {
                 yield String.valueOf(val);
             }
             case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
-            case FORMULA -> {
-                try {
-                    yield String.valueOf(cell.getNumericCellValue());
-                } catch (Exception e) {
-                    try {
-                        yield cell.getStringCellValue();
-                    } catch (Exception e2) {
-                        yield "";
+            default -> "";
+        };
+    }
+
+    /** Extracts USD price directly from the formula AST when POI fails to evaluate and cache is 0 */
+    private double extractPriceFromFormula(Cell netUsdCell, Row row) {
+        try {
+            String usdFormula = netUsdCell.getCellFormula().toUpperCase();
+            
+            // Expected format: ROUND(I3 / 483.34, 2)
+            // 1. Extract the exchange rate (the divisor)
+            double exchangeRate = 0;
+            java.util.regex.Matcher mRate = java.util.regex.Pattern.compile("/\\s*([0-9]+\\.?[0-9]*)").matcher(usdFormula);
+            if (mRate.find()) {
+                exchangeRate = Double.parseDouble(mRate.group(1));
+            }
+
+            if (exchangeRate > 0) {
+                // 2. Extract the cell reference for the Bolivar Neto (e.g., 'I3')
+                java.util.regex.Matcher mCell = java.util.regex.Pattern.compile("([A-Z]+)[0-9]+").matcher(usdFormula);
+                if (mCell.find()) {
+                    String colStr = mCell.group(1);
+                    int bsColIdx = org.apache.poi.ss.util.CellReference.convertColStringToIndex(colStr);
+                    Cell bsCell = row.getCell(bsColIdx);
+                    
+                    // 3. Inspect the Bolivar cell formula
+                    if (bsCell != null && bsCell.getCellType() == CellType.FORMULA) {
+                        String bsFormula = bsCell.getCellFormula().toUpperCase();
+                        
+                        // Expected format: IF(ISBLANK(K3), ROUND(3815.2928, 2), ...)
+                        // We find all ROUND(number, 2) and take the maximum as the base price
+                        java.util.regex.Matcher mBs = java.util.regex.Pattern.compile("ROUND\\(\\s*([0-9]+\\.?[0-9]*)\\s*,").matcher(bsFormula);
+                        double maxBs = 0;
+                        while (mBs.find()) {
+                            double val = Double.parseDouble(mBs.group(1));
+                            if (val > maxBs) {
+                                maxBs = val;
+                            }
+                        }
+                        
+                        if (maxBs > 0) {
+                            return maxBs / exchangeRate;
+                        }
                     }
                 }
             }
-            default -> "";
-        };
+        } catch (Exception e) {
+            // Silently fall through if formula parsing fails
+        }
+        return 0;
     }
 }
