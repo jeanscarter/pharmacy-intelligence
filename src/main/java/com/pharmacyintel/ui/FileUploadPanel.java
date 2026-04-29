@@ -153,6 +153,36 @@ public class FileUploadPanel extends JPanel {
         fileLabels.put(supplier, fileLabel);
         card.add(fileLabel);
 
+        // Commercial Discount (DC) Input
+        JPanel dcPanel = new JPanel(new MigLayout("insets 0", "[]8[grow]", ""));
+        dcPanel.setOpaque(false);
+        JLabel dcLabel = new JLabel("DC %:");
+        dcLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        dcLabel.setForeground(new Color(180, 185, 195));
+        
+        JTextField dcField = new JTextField("0.0", 5);
+        dcField.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        dcField.setToolTipText("Descuento Comercial (Opcional)");
+        dcField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                try {
+                    String text = dcField.getText().trim().replace(",", ".");
+                    if (text.isEmpty()) text = "0.0";
+                    double val = Double.parseDouble(text);
+                    GlobalConfig.getInstance().setCommercialDiscount(supplier, val);
+                } catch (NumberFormatException ex) {
+                    dcField.setText(String.valueOf(GlobalConfig.getInstance().getCommercialDiscount(supplier)));
+                }
+            }
+        });
+        // Initial value from config
+        dcField.setText(String.valueOf(GlobalConfig.getInstance().getCommercialDiscount(supplier)));
+        
+        dcPanel.add(dcLabel);
+        dcPanel.add(dcField, "growx");
+        card.add(dcPanel, "growx");
+
         // Click to browse
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         card.addMouseListener(new java.awt.event.MouseAdapter() {

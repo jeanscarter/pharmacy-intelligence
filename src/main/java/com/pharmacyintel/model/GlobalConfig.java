@@ -1,6 +1,8 @@
 package com.pharmacyintel.model;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
+import java.util.Map;
 
 public class GlobalConfig {
     private static final GlobalConfig INSTANCE = new GlobalConfig();
@@ -8,6 +10,10 @@ public class GlobalConfig {
     private double bcvRate = 1.0;
     private double targetMarginPct = 30.0;
     private LocalDateTime lastUpdated;
+    
+    // Commercial Discount (DC) fields
+    private final Map<Supplier, Double> commercialDiscounts = new EnumMap<>(Supplier.class);
+    private boolean applyCommercialDiscount = false;
 
     private GlobalConfig() {
     }
@@ -43,5 +49,21 @@ public class GlobalConfig {
 
     public double vesToUsd(double ves) {
         return bcvRate > 0 ? ves / bcvRate : 0;
+    }
+
+    public void setCommercialDiscount(Supplier supplier, double discount) {
+        commercialDiscounts.put(supplier, discount);
+    }
+
+    public double getCommercialDiscount(Supplier supplier) {
+        return commercialDiscounts.getOrDefault(supplier, 0.0);
+    }
+
+    public boolean isApplyCommercialDiscount() {
+        return applyCommercialDiscount;
+    }
+
+    public void setApplyCommercialDiscount(boolean applyCommercialDiscount) {
+        this.applyCommercialDiscount = applyCommercialDiscount;
     }
 }

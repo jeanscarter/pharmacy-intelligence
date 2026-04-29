@@ -19,6 +19,7 @@ public class DashboardPanel extends JPanel {
 
     private final ConsolidationEngine engine;
     private final JCheckBox includeAllCheck;
+    private final JCheckBox applyDcCheck;
     private ProductTablePanel tablePanel;
 
     public DashboardPanel(ConsolidationEngine engine) {
@@ -80,7 +81,20 @@ public class DashboardPanel extends JPanel {
         includeAllCheck.setSelected(false);
         includeAllCheck.setToolTipText(
                 "Desmarcado = Solo productos de Droactiva. Marcado = Full Outer Join (todos los proveedores).");
-        buttonBar.add(includeAllCheck);
+                
+        // Checkbox: Aplicar Descuento Comercial
+        applyDcCheck = new JCheckBox("Aplicar Descuento Comercial (DC)");
+        applyDcCheck.setFont(new Font("Segoe UI Emoji", Font.BOLD, 13));
+        applyDcCheck.setForeground(new Color(255, 200, 100));
+        applyDcCheck.setOpaque(false);
+        applyDcCheck.setSelected(GlobalConfig.getInstance().isApplyCommercialDiscount());
+        applyDcCheck.setToolTipText("Si se marca, aplica el porcentaje de DC ingresado en la carga de archivos al Precio Neto.");
+
+        JPanel checksPanel = new JPanel(new MigLayout("insets 0, wrap 1", "[]", "[]4[]"));
+        checksPanel.setOpaque(false);
+        checksPanel.add(includeAllCheck);
+        checksPanel.add(applyDcCheck);
+        buttonBar.add(checksPanel);
 
         // Recalculate button
         JButton refreshBtn = createStyledButton(" 🔄  Recalcular con Nuevo Margen ", ACCENT);
@@ -98,6 +112,9 @@ public class DashboardPanel extends JPanel {
     private void recalculateAndRefresh() {
         double margin = GlobalConfig.getInstance().getTargetMarginPct();
         boolean includeAll = includeAllCheck.isSelected();
+        
+        // Update DC flag in GlobalConfig
+        GlobalConfig.getInstance().setApplyCommercialDiscount(applyDcCheck.isSelected());
 
         engine.recalculate(margin, includeAll);
 
@@ -110,6 +127,7 @@ public class DashboardPanel extends JPanel {
             parent.removeAll();
             DashboardPanel newDash = new DashboardPanel(engine);
             newDash.includeAllCheck.setSelected(includeAll);
+            newDash.applyDcCheck.setSelected(applyDcCheck.isSelected());
             parent.setLayout(new BorderLayout());
             parent.add(newDash, BorderLayout.CENTER);
             parent.revalidate();

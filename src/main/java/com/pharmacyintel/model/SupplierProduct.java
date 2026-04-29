@@ -89,7 +89,7 @@ public class SupplierProduct {
      */
     public double getOfferPct() {
         if (basePrice <= 0) return 0;
-        return (1.0 - netPrice / basePrice) * 100.0;
+        return (1.0 - getNetPrice() / basePrice) * 100.0;
     }
 
     /**
@@ -101,7 +101,14 @@ public class SupplierProduct {
     }
 
     public double getNetPrice() {
-        return netPrice;
+        double currentNet = netPrice;
+        if (GlobalConfig.getInstance().isApplyCommercialDiscount()) {
+            double dc = GlobalConfig.getInstance().getCommercialDiscount(supplier);
+            if (dc > 0) {
+                currentNet = currentNet * (1.0 - dc / 100.0);
+            }
+        }
+        return currentNet;
     }
 
     public void setNetPrice(double netPrice) {
@@ -163,6 +170,9 @@ public class SupplierProduct {
     public boolean hasDiscount() {
         for (double d : discounts) {
             if (d > 0) return true;
+        }
+        if (GlobalConfig.getInstance().isApplyCommercialDiscount()) {
+            if (GlobalConfig.getInstance().getCommercialDiscount(supplier) > 0) return true;
         }
         return false;
     }

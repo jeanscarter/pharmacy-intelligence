@@ -185,14 +185,20 @@ public class ExcelExporter {
             setCellStyled(header, col++, "Código Interno", headerStyle);
         }
         setCellStyled(header, col++, "Descripción", headerStyle);
+        if (!isSinInventario) {
+            for (Supplier s : SUPPLIERS) {
+                setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
+            }
+            for (Supplier s : SUPPLIERS) {
+                setCellStyled(header, col++, "OF% " + s.getDisplayName(), supplierHeaderStyle);
+            }
+            for (Supplier s : SUPPLIERS) {
+                setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
+            }
+        }
         for (Supplier s : SUPPLIERS) {
             if (isSinInventario && s == Supplier.DROACTIVA)
                 continue;
-            if (!isSinInventario) {
-                setCellStyled(header, col++, "PV " + s.getDisplayName(), supplierHeaderStyle);
-                setCellStyled(header, col++, "OF% " + s.getDisplayName(), supplierHeaderStyle);
-                setCellStyled(header, col++, "Neto " + s.getDisplayName(), supplierHeaderStyle);
-            }
             setCellStyled(header, col++, "Stock " + s.getDisplayName(), stockHeaderStyle);
         }
         if (!isSinInventario) {
@@ -224,20 +230,61 @@ public class ExcelExporter {
             }
             setCellText(row, col++, mp.getDescription() != null ? mp.getDescription() : "", textStyle);
 
+            if (!isSinInventario) {
+                // 1. PV (Base Prices)
+                for (Supplier s : SUPPLIERS) {
+                    int stock = mp.getStockForSupplier(s);
+                    double basePrice = mp.getBasePriceForSupplier(s);
+                    if (stockOnly && stock <= 0) basePrice = 0;
+                    
+                    Cell pvCell = row.createCell(col++);
+                    if (basePrice > 0) {
+                        pvCell.setCellValue(basePrice);
+                        pvCell.setCellStyle(priceStyle);
+                    }
+                }
+                
+                // 2. OF% (Discounts)
+                for (Supplier s : SUPPLIERS) {
+                    int stock = mp.getStockForSupplier(s);
+                    double offerPct = mp.getOfferPctForSupplier(s);
+                    if (stockOnly && stock <= 0) offerPct = 0;
+                    
+                    Cell ofCell = row.createCell(col++);
+                    if (offerPct > 0) {
+                        ofCell.setCellValue(Math.round(offerPct));
+                        ofCell.setCellStyle(intPctStyle);
+                    }
+                }
+                
+                // 3. Neto (Net Prices)
+                for (Supplier s : SUPPLIERS) {
+                    int stock = mp.getStockForSupplier(s);
+                    double netPrice = mp.getNetPriceForSupplier(s);
+                    if (stockOnly && stock <= 0) netPrice = 0;
+                    
+                    Cell netCell = row.createCell(col++);
+                    if (netPrice > 0) {
+                        netCell.setCellValue(netPrice);
+                        if (winnerStyle != null && s == mp.getWinnerSupplier(stockOnly))
+                            netCell.setCellStyle(winnerStyle);
+                        else if (loserStyle != null && s == mp.getWorstPriceSupplier(stockOnly))
+                            netCell.setCellStyle(loserStyle);
+                        else
+                            netCell.setCellStyle(priceStyle);
+                    }
+                }
+            }
+
+            // 4. Stock
             for (Supplier s : SUPPLIERS) {
                 if (isSinInventario && s == Supplier.DROACTIVA)
                     continue;
-                // Sin Inventario: no winner/loser colors on cells
-                if (isSinInventario) {
-                    int stock = mp.getStockForSupplier(s);
-                    Cell stockCell = row.createCell(col++);
-                    if (stock > 0) {
-                        stockCell.setCellValue(stock);
-                        stockCell.setCellStyle(stockCellStyle);
-                    }
-                } else {
-                    col = writeSupplierBlock(row, col, mp, s, priceStyle, intPctStyle, stockCellStyle, winnerStyle,
-                            loserStyle, stockOnly);
+                int stock = mp.getStockForSupplier(s);
+                Cell stockCell = row.createCell(col++);
+                if (stock > 0) {
+                    stockCell.setCellValue(stock);
+                    stockCell.setCellStyle(stockCellStyle);
                 }
             }
 
@@ -553,54 +600,7 @@ public class ExcelExporter {
     // Helper methods
     // ====================================================================
 
-    /** Write PV, OF%, Neto, Stock for a single supplier */
-    private int writeSupplierBlock(Row row, int col, MasterProduct mp, Supplier s,
-            CellStyle priceStyle, CellStyle pctStyle, CellStyle stockCellStyle,
-            CellStyle winnerStyle, CellStyle loserStyle, boolean stockOnly) {
-        int stock = mp.getStockForSupplier(s);
 
-        double basePrice = mp.getBasePriceForSupplier(s);
-        double offerPct = mp.getOfferPctForSupplier(s);
-        double netPrice = mp.getNetPriceForSupplier(s);
-
-        if (stockOnly && stock <= 0) {
-            basePrice = 0;
-            offerPct = 0;
-            netPrice = 0;
-        }
-
-        Cell pvCell = row.createCell(col++);
-        if (basePrice > 0) {
-            pvCell.setCellValue(basePrice);
-            pvCell.setCellStyle(priceStyle);
-        }
-
-        Cell ofCell = row.createCell(col++);
-        if (offerPct > 0) {
-            ofCell.setCellValue(Math.round(offerPct));
-            ofCell.setCellStyle(pctStyle);
-        }
-
-        Cell netCell = row.createCell(col++);
-        if (netPrice > 0) {
-            netCell.setCellValue(netPrice);
-            // winnerStyle/loserStyle may be null (e.g. Sin Inventario)
-            if (winnerStyle != null && s == mp.getWinnerSupplier())
-                netCell.setCellStyle(winnerStyle);
-            else if (loserStyle != null && s == mp.getLoserSupplier())
-                netCell.setCellStyle(loserStyle);
-            else
-                netCell.setCellStyle(priceStyle);
-        }
-
-        Cell stockCell = row.createCell(col++);
-        if (stock > 0) {
-            stockCell.setCellValue(stock);
-            stockCell.setCellStyle(stockCellStyle);
-        }
-
-        return col;
-    }
 
     private void setCellStyled(Row row, int col, String value, CellStyle style) {
         Cell c = row.createCell(col);
