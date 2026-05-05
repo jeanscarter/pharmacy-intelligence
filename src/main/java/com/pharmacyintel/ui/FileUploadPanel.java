@@ -52,13 +52,13 @@ public class FileUploadPanel extends JPanel {
         subtitle.setForeground(new Color(130, 140, 160));
         add(subtitle, "center");
 
-        // File slots grid: 3 columns x 2 rows
-        JPanel grid = new JPanel(new MigLayout("insets 0, gap 12", "[grow][grow][grow][grow]", "[grow][grow]"));
+        // File slots grid: 4 columns x 2 rows
+        JPanel grid = new JPanel(new MigLayout("insets 0, gap 12, wrap 4", "[grow,fill][grow,fill][grow,fill][grow,fill]", "[grow,fill][grow,fill]"));
         grid.setOpaque(false);
 
         for (Supplier s : Supplier.values()) {
             JPanel card = createFileCard(s);
-            grid.add(card, "grow, h 140!");
+            grid.add(card, "h 140!");
         }
         add(grid, "growx");
 

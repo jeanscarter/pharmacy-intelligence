@@ -26,8 +26,8 @@ public class MainFrame extends JFrame {
     public MainFrame() {
         setTitle("Pharmacy Intelligence — Análisis Comparativo de Precios");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1540, 920);
-        setMinimumSize(new Dimension(1200, 750));
+        setSize(1300, 720);
+        setMinimumSize(new Dimension(1024, 650));
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
 
@@ -39,7 +39,15 @@ public class MainFrame extends JFrame {
 
         // Phase 1: Upload
         uploadPanel = new FileUploadPanel(this::onProcess);
-        rootPanel.add(uploadPanel, "UPLOAD");
+        
+        JScrollPane uploadScroll = new JScrollPane(uploadPanel);
+        uploadScroll.setBorder(null);
+        uploadScroll.getViewport().setBackground(ROOT_BG);
+        uploadScroll.getVerticalScrollBar().setUnitIncrement(16);
+        uploadScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        uploadScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        
+        rootPanel.add(uploadScroll, "UPLOAD");
 
         // Loading screen
         JPanel loadingPanel = createLoadingPanel();
