@@ -131,6 +131,8 @@ public class SyncOrchestrator {
             case NENA -> new NenaParser();
             case F24 -> new F24Parser();
             case P365 -> new P365CsvParser();
+            case INSUAMINCA -> new InsuamincaParser();
+            case CRISTMEDICALS -> new CristMedicalsParser();
         };
     }
 

@@ -8,7 +8,9 @@ public enum Supplier {
     COBECA("Cobeca", new Color(52, 168, 83)),
     NENA("Nena", new Color(251, 188, 4)),
     F24("F24", new Color(171, 71, 188)),
-    P365("365", new Color(255, 112, 67));
+    P365("365", new Color(255, 112, 67)),
+    INSUAMINCA("Insuaminca", new Color(0, 188, 212)),
+    CRISTMEDICALS("CristMedicals", new Color(233, 30, 99));
 
     private final String displayName;
     private final Color color;

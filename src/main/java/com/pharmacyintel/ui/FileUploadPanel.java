@@ -53,7 +53,7 @@ public class FileUploadPanel extends JPanel {
         add(subtitle, "center");
 
         // File slots grid: 3 columns x 2 rows
-        JPanel grid = new JPanel(new MigLayout("insets 0, gap 16", "[grow][grow][grow]", "[grow][grow]"));
+        JPanel grid = new JPanel(new MigLayout("insets 0, gap 12", "[grow][grow][grow][grow]", "[grow][grow]"));
         grid.setOpaque(false);
 
         for (Supplier s : Supplier.values()) {
@@ -140,7 +140,7 @@ public class FileUploadPanel extends JPanel {
         card.add(headerPanel);
 
         // File extension hint
-        String ext = (supplier == Supplier.DROACTIVA || supplier == Supplier.DROMARKO) ? "CSV" : "XLSX";
+        String ext = (supplier == Supplier.DROACTIVA || supplier == Supplier.DROMARKO || supplier == Supplier.P365) ? "CSV" : "XLSX";
         JLabel extLabel = new JLabel("Archivo " + ext);
         extLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         extLabel.setForeground(new Color(120, 130, 145));
